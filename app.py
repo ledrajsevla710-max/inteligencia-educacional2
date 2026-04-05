@@ -1,46 +1,67 @@
 import streamlit as st
+import pandas as pd
 
-# Configuração da página
-st.set_page_config(page_title="Inteligência Educacional PI", page_icon="🎓")
+st.set_page_config(page_title="Inteligência Educacional PI", page_icon="🎓", layout="wide")
 
-st.title("📊 Simulador de Proficiência SAEPI")
+st.title("📊 Sistema de Proficiência SAEPI/SAEB")
 st.markdown("---")
 
-# Barra lateral para informações
-st.sidebar.header("Configurações da Avaliação")
-serie = st.sidebar.selectbox("Selecione a Série", [2, 5, 9])
-disciplina = st.sidebar.selectbox("Disciplina", ["Matemática", "Português"])
+# Menu Lateral
+st.sidebar.header("Painel de Controle")
+opcao = st.sidebar.radio("Escolha a função:", ["Lançamento Individual", "Upload de Planilha (Lote)", "Relatórios"])
 
-# Área de entrada de dados
-st.subheader(f"Lançamento de Notas - {serie}º Ano ({disciplina})")
-aluno = st.text_input("Nome do Aluno")
-
-# Simulação de 10 questões para o exemplo (você pode aumentar para 22)
-col1, col2 = st.columns(2)
-respostas = []
-
-with col1:
-    for i in range(1, 6):
-        res = st.radio(f"Questão {i}", ["Acerto", "Erro"], horizontal=True)
-        respostas.append(1 if res == "Acerto" else 0)
-
-with col2:
-    for i in range(6, 11):
-        res = st.radio(f"Questão {i}", ["Acerto", "Erro"], horizontal=True)
-        respostas.append(1 if res == "Acerto" else 0)
-
-# Botão de Calcular
-if st.button("Gerar Diagnóstico de Proficiência"):
-    # Lógica simples de peso (Fáceis 1-5, Difíceis 6-10)
-    pesos = [1, 1, 1, 1, 1, 3, 3, 3, 3, 3]
-    nota = (sum(r * p for r, p in zip(respostas, pesos)) / sum(pesos)) * 1000
+if opcao == "Lançamento Individual":
+    st.subheader("📝 Cadastro de Desempenho por Aluno")
     
-    # Exibição do Resultado
-    st.metric(label="Nota Estimada SAEPI", value=f"{nota:.1f}")
+    col_inf1, col_inf2, col_inf3 = st.columns(3)
+    with col_inf1:
+        aluno = st.text_input("Nome Completo do Aluno")
+    with col_inf2:
+        serie = st.selectbox("Série", ["2º Ano", "5º Ano", "9º Ano"])
+    with col_inf3:
+        materia = "Matemática" # Fixo conforme seu foco
+
+    st.write("---")
+    st.write(f"**Marque os acertos do aluno nas 22 questões de {materia}:**")
     
-    if nota < 250:
-        st.error(f"Nível: **INSUFICIENTE** (Aluno: {aluno})")
-    elif nota < 325:
-        st.warning(f"Nível: **BÁSICO** (Aluno: {aluno})")
-    else:
-        st.success(f"Nível: **PROFICIENTE/AVANÇADO** (Aluno: {aluno})")
+    # Criar 22 checkboxes divididos em colunas para não ficar gigante
+    col_q1, col_q2, col_q3, col_q4 = st.columns(4)
+    respostas = []
+    
+    for i in range(1, 23):
+        if i <= 6: col = col_q1
+        elif i <= 12: col = col_q2
+        elif i <= 17: col = col_q3
+        else: col = col_q4
+        
+        with col:
+            check = st.checkbox(f"Questão {i:02d}", key=f"q{i}")
+            respostas.append(1 if check else 0)
+
+    if st.button("Gerar Diagnóstico"):
+        # Lógica de pesos simulada (depois você ajusta por descritor)
+        pesos = [1]*10 + [2]*7 + [3]*5 # 10 fáceis, 7 médias, 5 difíceis
+        nota = (sum(r * p for r, p in zip(respostas, pesos)) / sum(pesos)) * 1000
+        
+        st.metric(label="Nota de Proficiência Estimada", value=f"{nota:.1f}")
+        
+        if nota < 250: st.error("Nível: **INSUFICIENTE**")
+        elif nota < 325: st.warning("Nível: **BÁSICO**")
+        elif nota < 400: st.success("Nível: **PROFICIENTE**")
+        else: st.info("Nível: **AVANÇADO**")
+
+elif opcao == "Upload de Planilha (Lote)":
+    st.subheader("📂 Processamento em Massa (Excel)")
+    st.write("Suba aqui a planilha preenchida pelos professores para calcular a proficiência de toda a turma de uma vez.")
+    
+    arquivo = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+    
+    if arquivo:
+        df = pd.read_excel(arquivo)
+        st.write("Visualização dos dados carregados:")
+        st.dataframe(df.head())
+        st.success("Dados prontos para processamento! (Lógica de cálculo vinculada aos seus descritores).")
+
+else:
+    st.subheader("📈 Relatórios de Gestão")
+    st.info("Aqui serão gerados os gráficos por descritor (Ex: 40% da turma errou o Descritor D12).")
