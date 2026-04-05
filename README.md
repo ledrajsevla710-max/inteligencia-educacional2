@@ -1,4 +1,4 @@
-# inteligencia-educaciona
+# inteligencia-educacional
 "Sistema de Inteligência Educacional e Análise de Proficiência (Escala SAEPI/SAEB). Desenvolvido para processamento de dados pedagógicos, projeto de TRI simulado e monitoramento de descritores BNCC para a rede municipal."
 # 🎓 Inteligência Educacional PI
 > **Sistema de Monitoramento e Análise de Proficiência Pedagógica**
