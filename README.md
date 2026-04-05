@@ -34,4 +34,4 @@ Diferente da contagem simples de acertos, este sistema utiliza **Média Ponderad
 3. Para rodar o analisador em Python, execute: `python analisador_saepi.py`.
 
 ---
-**Desenvolvido por Jardel Alves Vieira** *Especialista em Educação Física e Gestão Pedagógica*
+**Desenvolvido por Jardel Alves Vieira** *Especialista em Educação Matemática e Gestão Pedagógica*
