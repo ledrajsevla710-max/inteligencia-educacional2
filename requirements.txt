@@ -4,5 +4,5 @@ numpy
 fpdf
 matplotlib
 openpyxl
-xlsxwriter
-pip install gspread google-auth
+gspread
+google-auth
