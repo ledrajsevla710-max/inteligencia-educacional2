@@ -99,9 +99,11 @@ if uploaded_file:
         st.pyplot(fig)
 
     st.markdown("---")
+    # --- FINAL DO DASHBOARD: ANÁLISE E PDF ---
+    st.markdown("---")
     st.subheader("🎯 Análise Detalhada (Gabarito vs Marcadas)")
     
-    # Grid de Questões
+    # Grid de Questões (Visualização na Tela)
     col_q_grid = st.columns(4)
     for i, q in enumerate(cols_q):
         with col_q_grid[i % 4]:
@@ -116,5 +118,61 @@ if uploaded_file:
                     st.text(label)
             st.write("---")
 
+    # --- NOVO BLOCO DO PDF (COLE AQUI) ---
+    st.subheader("🖨️ Documentação e Exportação")
+    
+    col_down1, col_down2 = st.columns(2)
+    
+    with col_down1:
+        # Botão Excel
+        excel_data = gerar_excel(df)
+        st.download_button("📊 Baixar Resultados em Excel", excel_data, f"Resultado_{disciplina}_{serie}.xlsx", use_container_width=True)
+
+    with col_down2:
+        # Lógica do PDF
+        if st.button("📄 Gerar Relatório Pedagógico (PDF)", use_container_width=True):
+            pdf = FPDF()
+            pdf.add_page()
+            
+            # Cabeçalho Blue Profissional
+            pdf.set_fill_color(31, 119, 180)
+            pdf.rect(0, 0, 210, 40, 'F')
+            pdf.set_text_color(255, 255, 255)
+            pdf.set_font('Arial', 'B', 16)
+            pdf.cell(0, 20, 'RELATÓRIO DE DESEMPENHO - SAEPI JF', 0, 1, 'C')
+            pdf.set_font('Arial', '', 12)
+            pdf.cell(0, 5, f'Disciplina: {disciplina} | Série: {serie}', 0, 1, 'C')
+            
+            pdf.ln(25)
+            pdf.set_text_color(0, 0, 0)
+            
+            # Resumo de Dados no PDF
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, f"Proficiência Média: {media_geral:.1f}", ln=True)
+            pdf.set_font('Arial', 'I', 12)
+            pdf.cell(0, 10, f"Classificação: {nivel_txt}", ln=True)
+            pdf.ln(10)
+            
+            # Tabela de Itens Críticos no PDF
+            pdf.set_font('Arial', 'B', 12)
+            pdf.set_fill_color(230, 230, 230)
+            pdf.cell(0, 10, " ITENS QUE NECESSITAM DE INTERVENÇÃO", 0, 1, 'L', True)
+            pdf.set_font('Arial', '', 10)
+            
+            for q in cols_q:
+                pct = (df[q].str.upper() == gabarito_atual[q]).mean() * 100
+                if pct < 50:
+                    pdf.multi_cell(0, 8, f"-> Questão {q}: Apenas {pct:.1f}% de acerto. Gabarito: {gabarito_atual[q]}.")
+            
+            pdf.ln(10)
+            pdf.set_font('Arial', 'I', 8)
+            pdf.cell(0, 10, "Documento gerado para uso da SEMED - Jose de Freitas / PI", 0, 0, 'C')
+            
+            # Link de Download
+            pdf_output = pdf.output(dest='S').encode('latin-1')
+            b64 = base64.b64encode(pdf_output).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_{disciplina}_{serie}.pdf" style="padding:15px; background-color:#2e7bcf; color:white; border-radius:10px; text-decoration:none; font-weight:bold; display:block; text-align:center;">⬇️ CLIQUE AQUI PARA BAIXAR O PDF</a>'
+            st.markdown(href, unsafe_allow_html=True)
+
 else:
-    st.warning("⚠️ Por favor, suba a planilha para visualizar os dados.")
+    st.warning("⚠️ Por favor, suba a planilha para visualizar os dados e gerar o PDF.")
