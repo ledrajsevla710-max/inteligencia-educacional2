@@ -52,15 +52,47 @@ if opcao == "Lançamento Individual":
 
 elif opcao == "Upload de Planilha (Lote)":
     st.subheader("📂 Processamento em Massa (Excel)")
-    st.write("Suba aqui a planilha preenchida pelos professores para calcular a proficiência de toda a turma de uma vez.")
     
-    arquivo = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type=["xlsx"])
+    arquivo = st.file_uploader("Suba a planilha preenchida", type=["xlsx"])
     
     if arquivo:
+        # Lendo a planilha
         df = pd.read_excel(arquivo)
-        st.write("Visualização dos dados carregados:")
-        st.dataframe(df.head())
-        st.success("Dados prontos para processamento! (Lógica de cálculo vinculada aos seus descritores).")
+        
+        # Definindo os pesos das 22 questões (Exemplo: as últimas 5 são difíceis)
+        pesos = [1]*10 + [2]*7 + [3]*5 
+        soma_pesos = sum(pesos)
+        
+        # Criando a coluna de questões para o cálculo (Q01 até Q22)
+        colunas_questoes = [f'Q{i:02d}' for i in range(1, 23)]
+        
+        # Função para calcular a nota de cada linha (aluno)
+        def calcular_nota(linha):
+            pontos = sum(linha[colunas_questoes] * pesos)
+            return (pontos / soma_pesos) * 1000
+
+        # Aplicando o cálculo em toda a planilha
+        df['Proficiência'] = df.apply(calcular_nota, axis=1)
+        
+        # Classificando os níveis
+        def classificar(nota):
+            if nota < 250: return "Insuficiente"
+            elif nota < 325: return "Básico"
+            elif nota < 400: return "Proficiente"
+            else: return "Avançado"
+            
+        df['Nível'] = df['Proficiência'].apply(classificar)
+        
+        # Exibindo o resultado final
+        st.write("### Resultado Processado")
+        st.dataframe(df[['Nome do Aluno', 'Série', 'Proficiência', 'Nível']])
+        
+        # Botão para baixar a planilha pronta
+        st.download_button(
+            label="Baixar Resultados em Excel",
+            data=arquivo, # Aqui você pode converter o DF de volta para excel se desejar
+            file_name="resultados_saepi.xlsx"
+        )
 
 else:
     st.subheader("📈 Relatórios de Gestão")
