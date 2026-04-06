@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 import io
 import os
 
-# --- 1. CONFIGURAÇÕES ---
-st.set_page_config(page_title="Gestão Educacional - TRI", layout="wide", page_icon="🏫")
+# --- 1. CONFIGURAÇÕES DA PÁGINA ---
+st.set_page_config(page_title="Protótipo Gestão TRI", layout="wide", page_icon="🏫")
 
 # --- 2. MAPA DE HABILIDADES (9º ANO MATEMÁTICA) ---
 MAPA_HABILIDADES = {
@@ -60,28 +60,78 @@ def obter_nivel(score):
 
 def gerar_modelo_excel():
     output = io.BytesIO()
-    # Criando uma planilha com colunas Escola, Turma, Aluno e Q01-Q22
     colunas = ["Escola", "Turma", "Nome"] + [f"Q{i:02d}" for i in range(1, 23)]
-    df_modelo = pd.DataFrame(columns=colunas)
-    # Exemplo de preenchimento
-    df_modelo.loc[0] = ["Escola Municipal A", "9º Ano A", "Exemplo Aluno"] + ["A"]*22
-    
+    df_m = pd.DataFrame(columns=colunas)
+    df_m.loc[0] = ["Escola Exemplo", "9º Ano A", "Nome do Aluno"] + ["A"]*22
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_modelo.to_excel(writer, index=False)
+        df_m.to_excel(writer, index=False)
     return output.getvalue()
 
 # --- 4. INTERFACE ---
-st.title("🏫 Sistema de Monitoramento Pedagógico (TRI)")
+st.title("📊 Protótipo de Inteligência Educacional - Matriz TRI")
 
-# Barra Lateral com Botão de Download do Modelo
-st.sidebar.header("⚙️ Configurações")
-st.sidebar.download_button(
-    label="📂 Baixar Planilha Modelo",
-    data=gerar_modelo_excel(),
-    file_name="modelo_respostas_tri.xlsx",
-    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    use_container_width=True
-)
+# Sidebar
+st.sidebar.header("Configurações")
+st.sidebar.download_button("📂 Baixar Planilha Modelo", gerar_modelo_excel(), "modelo_tri.xlsx", use_container_width=True)
 
 disciplina = st.sidebar.selectbox("Disciplina:", ["Matemática"])
-serie = st.sidebar.selectbox("S
+serie = st.sidebar.selectbox("Série:", ["9º Ano"])
+
+uploaded_file = st.file_uploader("📥 Suba a planilha preenchida", type="xlsx")
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
+    cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+    gabarito = GABARITOS[disciplina]
+
+    # Cálculo TRI
+    for idx, row in df.iterrows():
+        binario = {q: 1 if str(row[q]).upper() == gabarito[q] else 0 for q in cols_q}
+        df.at[idx, 'Proficiência'] = calcular_tri(binario)
+
+    # Filtros de Gestão
+    st.markdown("---")
+    f_esc, f_tur = st.columns(2)
+    with f_esc:
+        escola_sel = st.selectbox("Filtrar Escola:", ["Todas"] + list(df['Escola'].unique()))
+    with f_tur:
+        turma_sel = st.selectbox("Filtrar Turma:", ["Todas"] + list(df['Turma'].unique()))
+
+    # Aplicar Filtros
+    df_f = df.copy()
+    if escola_sel != "Todas": df_f = df_f[df_f['Escola'] == escola_sel]
+    if turma_sel != "Todas": df_f = df_f[df_f['Turma'] == turma_sel]
+
+    # Resultados
+    m_f = df_f['Proficiência'].mean()
+    txt_f, cor_f = obter_nivel(m_f)
+    
+    st.metric(f"Proficiência Média: {escola_sel} | {turma_sel}", f"{m_f:.1f}", txt_f)
+
+    # Gráfico
+    acertos_f = [(df_f[q].str.upper() == gabarito[q]).mean() * 100 for q in cols_q]
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.bar(cols_q, acertos_f, color='#1F77B4')
+    ax.set_ylim(0, 100)
+    st.pyplot(fig)
+
+    # Botão PDF
+    if st.button("📄 Gerar Relatório PDF Detalhado", use_container_width=True):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, f'RELATÓRIO TRI - {escola_sel} / {turma_sel}', ln=True, align='C')
+        pdf.ln(5)
+        for q in cols_q:
+            perc = (df_f[q].str.upper() == gabarito[q]).mean() * 100
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 7, f"Item {q} - Acerto: {perc:.1f}% (Gab: {gabarito[q]})", ln=True)
+            pdf.set_font('Arial', 'I', 9)
+            pdf.multi_cell(0, 5, f"Habilidade: {MAPA_HABILIDADES[disciplina][q]}")
+            pdf.ln(2)
+
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        b64 = base64.b64encode(pdf_bytes).decode()
+        st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio.pdf" style="display:block; text-align:center; padding:10px; background-color:#2e7bcf; color:white; border-radius:5px; text-decoration:none;">📥 BAIXAR PDF</a>', unsafe_allow_html=True)
+else:
+    st.info("Aguardando planilha...")
