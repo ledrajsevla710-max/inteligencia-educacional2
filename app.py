@@ -54,4 +54,44 @@ def calcular_tri(respostas_binarias):
 def obter_nivel(score):
     if score < 150: return "Abaixo do Básico", "#FF4B4B"
     if score < 200: return "Básico", "#FACA2E"
-    if score < 250: return "Proficiente", "#00CC96
+    if score < 250: return "Proficiente", "#00CC96"
+    return "Avançado", "#1F77B4"
+
+def gerar_modelo_excel():
+    output = io.BytesIO()
+    colunas = ["Escola", "Turma", "Nome"] + [f"Q{i:02d}" for i in range(1, 23)]
+    dados = [["Escola Exemplo", "9º A", "Aluno Teste"] + ["C"]*22]
+    df_m = pd.DataFrame(dados, columns=colunas)
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+        df_m.to_excel(writer, index=False)
+    return output.getvalue()
+
+# --- 4. INTERFACE ---
+st.title("🏛️ Gestão Municipal de Educação - TRI")
+
+st.sidebar.header("Painel Administrativo")
+st.sidebar.download_button("📥 Baixar Planilha Modelo", gerar_modelo_excel(), "modelo_gestao.xlsx", use_container_width=True)
+
+serie = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+uploaded_file = st.file_uploader("📥 Carregar Planilha Preenchida", type="xlsx")
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file).fillna("X")
+    cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+    gabarito = GABARITOS["Matemática"]
+
+    # Processamento TRI
+    for idx, row in df.iterrows():
+        binario = {q: 1 if str(row[q]).upper() == gabarito[q] else 0 for q in cols_q}
+        df.at[idx, 'Proficiência'] = calcular_tri(binario)
+
+    # Visão Municipal
+    st.subheader("📊 Panorama Geral do Município")
+    media_mun = df['Proficiência'].mean()
+    st.metric("Proficiência Média Municipal", f"{media_mun:.1f}")
+
+    rank = df.groupby('Escola')['Proficiência'].mean().sort_values().reset_index()
+    fig_mun, ax_mun = plt.subplots(figsize=(10, 3))
+    ax_mun.barh(rank['Escola'], rank['Proficiência'], color='#1F77B4')
+    ax_mun.axvline(media_mun, color='red', linestyle='--', label='Média Geral')
+    ax
