@@ -6,10 +6,10 @@ import base64
 import matplotlib.pyplot as plt
 import io
 
-# --- 1. CONFIGURAÇÕES DA PÁGINA ---
+# --- 1. CONFIGURAÇÕES ---
 st.set_page_config(page_title="Gestão TRI José de Freitas", layout="wide", page_icon="🏛️")
 
-# --- 2. MATRIZ DE REFERÊNCIA DETALHADA ---
+# --- 2. MATRIZ DE REFERÊNCIA ---
 MAPA_HABILIDADES = {
     "Matemática": {
         "Q01": {"desc": "D6 - Reconhecer ângulos como mudança de direção ou giros.", "sugestao": "Praticar com ponteiros de relógio e transferidor."},
@@ -41,7 +41,7 @@ GABARITOS = {
     "Matemática": {f'Q{i:02d}': g for i, g in enumerate(['C','B','A','C','B','C','C','A','B','C','C','C','D','C','B','A','C','C','A','C','B','B'], 1)}
 }
 
-# --- 3. FUNÇÕES TÉCNICAS ---
+# --- 3. FUNÇÕES ---
 def calcular_tri(respostas_binarias):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
@@ -51,16 +51,98 @@ def calcular_tri(respostas_binarias):
         verossimilhanca *= p if acerto == 1 else (1 - p)
     return (thetas[np.argmax(verossimilhanca)] + 4) * 50
 
-def obter_nivel(score):
-    if score < 150: return "Abaixo do Básico", "#FF4B4B"
-    if score < 200: return "Básico", "#FACA2E"
-    if score < 250: return "Proficiente", "#00CC96"
-    return "Avançado", "#1F77B4"
-
 def gerar_modelo_excel():
     output = io.BytesIO()
     colunas = ["Escola", "Turma", "Nome"] + [f"Q{i:02d}" for i in range(1, 23)]
-    dados = [["Escola Exemplo", "9º A", "Aluno Teste"] + ["C"]*22]
-    df_m = pd.DataFrame(dados, columns=colunas)
+    df_m = pd.DataFrame([["Escola A", "9º A", "Aluno Teste"] + ["C"]*22], columns=colunas)
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_m.to_excel(writer, index=
+        df_m.to_excel(writer, index=False)
+    return output.getvalue()
+
+# --- 4. INTERFACE ---
+st.title("🏛️ Gestão Educacional TRI - José de Freitas")
+
+st.sidebar.header("Configurações")
+st.sidebar.download_button("📥 Baixar Modelo Excel", gerar_modelo_excel(), "modelo.xlsx", use_container_width=True)
+
+# Seleção de Disciplina e Série
+disciplina_sel = st.sidebar.selectbox("Disciplina:", ["Matemática"])
+serie_sel = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+
+uploaded_file = st.file_uploader("📂 Carregar Planilha de Resultados", type="xlsx")
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file).fillna("X")
+    cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+    gabarito = GABARITOS[disciplina_sel]
+
+    # Processamento TRI
+    for idx, row in df.iterrows():
+        binario = {q: 1 if str(row[q]).upper() == gabarito[q] else 0 for q in cols_q}
+        df.at[idx, 'Proficiência'] = calcular_tri(binario)
+
+    # Panorama Geral
+    st.subheader("📊 Panorama Geral do Município")
+    media_mun = df['Proficiência'].mean()
+    st.metric("Proficiência Média da Rede", f"{media_mun:.1f}")
+
+    rank = df.groupby('Escola')['Proficiência'].mean().sort_values().reset_index()
+    fig_mun, ax_mun = plt.subplots(figsize=(10, 3))
+    ax_mun.barh(rank['Escola'], rank['Proficiência'], color='#1F77B4')
+    ax_mun.axvline(media_mun, color='red', linestyle='--', label='Média Geral')
+    st.pyplot(fig_mun)
+
+    st.divider()
+
+    # Filtros
+    f1, f2 = st.columns(2)
+    esc_sel = f1.selectbox("Filtrar Escola:", ["Todas"] + sorted(list(df['Escola'].unique())))
+    tur_sel = f2.selectbox("Filtrar Turma:", ["Todas"] + sorted(list(df['Turma'].unique())))
+
+    df_f = df.copy()
+    if esc_sel != "Todas": df_f = df_f[df_f['Escola'] == esc_sel]
+    if tur_sel != "Todas": df_f = df_f[df_f['Turma'] == tur_sel]
+
+    # Análise de Itens
+    st.markdown("### 🎯 Análise de Distratores (A, B, C, D)")
+    grid = st.columns(3)
+    for i, q in enumerate(cols_q):
+        with grid[i % 3]:
+            # Força as 4 colunas aparecerem
+            cont = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
+            st.write(f"**Item {q}** (Gab: {gabarito[q]})")
+            fig_q, ax_q = plt.subplots(figsize=(3, 4))
+            cores = ['#00CC96' if a == gabarito[q] else '#FF4B4B' for a in ['A','B','C','D']]
+            ax_q.bar(['A','B','C','D'], cont, color=cores)
+            ax_q.set_ylim(0, 100)
+            st.pyplot(fig_q)
+            st.caption(f"Habilidade: {MAPA_HABILIDADES[disciplina_sel][q]['desc']}")
+            st.divider()
+
+    # Relatório PDF
+    if st.button("📄 GERAR RELATÓRIO PDF ANALÍTICO", use_container_width=True):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, 'RELATÓRIO TÉCNICO TRI - JOSÉ DE FREITAS', ln=True, align='C')
+        pdf.set_font('Arial', '', 10)
+        pdf.cell(0, 7, f'Escola: {esc_sel} | Turma: {tur_sel}', ln=True, align='C')
+        pdf.ln(10)
+
+        for q in cols_q:
+            perc = (df_f[q].str.upper() == gabarito[q]).mean() * 100
+            info = MAPA_HABILIDADES[disciplina_sel][q]
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 7, f"Item {q} | Acerto: {perc:.1f}% | Gabarito: {gabarito[q]}", ln=True)
+            pdf.set_font('Arial', '', 9)
+            pdf.multi_cell(0, 5, f"Descrição: {info['desc']}")
+            if perc < 50:
+                pdf.set_text_color(255, 0, 0)
+                pdf.multi_cell(0, 5, f"Sugestão Pedagógica: {info['sugestao']}")
+                pdf.set_text_color(0, 0, 0)
+            pdf.ln(5)
+            if pdf.get_y() > 250: pdf.add_page()
+
+        pdf_output = pdf.output(dest='S').encode('latin-1')
+        b64 = base64.b64encode(pdf_output).decode()
+        st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_Analitico.pdf" style="display:block; text-align:center; padding:15px; background-color:#2e7bcf; color:white; border-radius:10px; text-decoration:none; font-weight:bold;">📥 BAIXAR RELATÓRIO COMPLETO</a>', unsafe_allow_html=True)
