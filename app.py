@@ -6,8 +6,8 @@ import base64
 
 st.set_page_config(page_title="SAEPI - Inteligência Educacional", layout="wide", page_icon="🎓")
 
-# --- MAPEAMENTO DE DESCRITORES (Ajuste conforme a matriz do Piauí) ---
-MAPA_DESCRITORES = {f'Q{i:02d}': f'Descritor D{i}' for i in range(1, 23)}
+# --- MAPEAMENTO DE DESCRITORES ---
+MAPA_DESCRITORES = {f'Q{i:02d}': f'D{i}' for i in range(1, 23)}
 
 # --- MOTOR TRI AVANÇADO (MODELO 2PL) ---
 def calcular_score_tri(respostas, parametros):
@@ -41,7 +41,7 @@ def gerar_pdf_detalhado(df_geral, media_mun, escola, serie, alertas_descritores)
     pdf.set_font("Arial", 'B', 12)
     pdf.cell(0, 10, "DIAGNOSTICO DE HABILIDADES CRITICAS", ln=True)
     pdf.set_font("Arial", '', 11)
-    for alerta in alertas_descritores[:8]:
+    for alerta in alertas_descritores[:10]:
         pdf.multi_cell(0, 8, f"- {alerta}")
     return pdf.output(dest='S').encode('latin-1')
 
@@ -73,6 +73,34 @@ if perfil == "Professor":
             dfp = pd.read_excel(arq_p)
             qs = [f'Q{i:02d}' for i in range(1, 23)]
             if all(c in dfp.columns for c in qs):
-                # LINHA CORRIGIDA ABAIXO (Parênteses fechados)
                 dfp['Proficiência_TRI'] = dfp[qs].apply(lambda x: calcular_score_tri(x.tolist(), itens_config), axis=1)
-                st.
+                st.dataframe(dfp)
+            else:
+                st.error("Colunas Q01 a Q22 nao encontradas.")
+
+else: # VISÃO GESTOR
+    st.header(f"Painel de Gestao - {disciplina}")
+    arq_g = st.file_uploader("Planilha Municipal", type="xlsx", key="up_g")
+    if arq_g:
+        dfg = pd.read_excel(arq_g)
+        qs = [f'Q{i:02d}' for i in range(1, 23)]
+        if all(c in dfg.columns for c in qs):
+            dfg['Proficiência_TRI'] = dfg[qs].apply(lambda x: calcular_score_tri(x.tolist(), itens_config), axis=1)
+            
+            escolas = ["Todas"] + sorted(dfg['Escola'].unique().tolist())
+            esc_sel = st.selectbox("Filtrar Escola", escolas)
+            df_f = dfg if esc_sel == "Todas" else dfg[dfg['Escola'] == esc_sel]
+            
+            m_f = df_f['Proficiência_TRI'].mean()
+            st.metric(f"Media {esc_sel}", f"{m_f:.1f}")
+            st.bar_chart(df_f.groupby('Escola' if esc_sel == "Todas" else 'Turma')['Proficiência_TRI'].mean())
+            
+            percentuais = df_f[qs].mean() * 100
+            criticas = percentuais[percentuais < 50].index.tolist()
+            alertas = [f"{q} ({MAPA_DESCRITORES[qs.index(q) if q in qs else 0]}): Baixo acerto ({percentuais[q]:.1f}%)" for q in criticas]
+            
+            if st.button("📄 Gerar PDF Detalhado"):
+                pdf_b = gerar_pdf_detalhado(df_f, m_f, esc_sel, serie_ref, alertas)
+                b64 = base64.b64encode(pdf_b).decode()
+                href = f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_{esc_sel}.pdf" style="padding:10px; background-color:red; color:white; border-radius:5px; text-decoration:none;">Baixar PDF</a>'
+                st.markdown(href, unsafe_allow_html=True)
