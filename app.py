@@ -115,4 +115,4 @@ else:
         st.session_state['autenticado'] = False
         st.rerun()
 
-    elif menu
+    elif menu:
