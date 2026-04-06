@@ -6,6 +6,12 @@ import base64
 
 st.set_page_config(page_title="SAEPI - Inteligência Educacional", layout="wide", page_icon="🎓")
 
+# --- MAPEAMENTO DE DESCRITORES (Exemplo para Matemática) ---
+# Você pode ajustar esses nomes de acordo com a matriz do Piauí
+MAPA_DESCRITORES = {
+    f'Q{i:02d}': f'Descritor D{i+1}' for i in range(1, 23)
+}
+
 # --- MOTOR TRI AVANÇADO ---
 def calcular_score_tri(respostas, parametros):
     if not any(respostas): return 0.0
@@ -22,82 +28,77 @@ for i in range(22):
     elif i < 15: itens_config.append({'a': 1.5, 'b': 0.0})
     else: itens_config.append({'a': 2.0, 'b': 1.8})
 
-# --- FUNÇÃO GERADORA DE PDF ---
-def gerar_pdf(df_geral, media_mun, alertas):
+# --- FUNÇÃO GERADORA DE PDF DETALHADO ---
+def gerar_pdf_detalhado(df_geral, media_mun, escola, serie, alertas_descritores):
     pdf = FPDF()
     pdf.add_page()
+    
+    # Cabeçalho
     pdf.set_font("Arial", 'B', 16)
-    pdf.cell(200, 10, "Relatorio de Gestao - Jose de Freitas", ln=True, align='C')
-    
+    pdf.cell(200, 10, "RELATÓRIO DE DESEMPENHO - JOSÉ DE FREITAS", ln=True, align='C')
     pdf.set_font("Arial", '', 12)
-    pdf.ln(10)
-    pdf.cell(200, 10, f"Media de Proficiencia Municipal: {media_mun:.1f}", ln=True)
+    pdf.cell(200, 10, f"Série: {serie} | Unidade: {escola if escola != 'Todas' else 'Geral'}", ln=True, align='C')
     
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 14)
+    pdf.cell(200, 10, f"Proficiência Média: {media_mun:.1f}", ln=True)
+    
+    # Análise de Habilidades
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, "Alertas de Habilidades:", ln=True)
+    pdf.set_fill_color(230, 230, 230)
+    pdf.cell(0, 10, "DIAGNÓSTICO DE HABILIDADES CRÍTICAS", ln=True, fill=True)
+    
     pdf.set_font("Arial", '', 11)
-    for alerta in alertas[:10]: # Limita a 10 alertas no PDF
+    pdf.ln(2)
+    for alerta in alertas_descritores:
         pdf.multi_cell(0, 8, f"- {alerta}")
 
-    pdf.ln(10)
-    pdf.set_font("Arial", 'B', 12)
-    pdf.cell(200, 10, "Resumo por Escola:", ln=True)
-    resumo = df_geral.groupby('Escola')['Proficiência_TRI'].mean().reset_index()
-    pdf.set_font("Arial", '', 10)
-    for _, row in resumo.iterrows():
-        pdf.cell(0, 8, f"{row['Escola']}: {row['Proficiência_TRI']:.1f}", ln=True)
-        
+    # Tabela por Escola (se for visão Geral)
+    if escola == "Todas":
+        pdf.ln(10)
+        pdf.set_font("Arial", 'B', 12)
+        pdf.cell(0, 10, "DESEMPENHO POR ESCOLA", ln=True)
+        resumo = df_geral.groupby('Escola')['Proficiência_TRI'].mean().reset_index()
+        pdf.set_font("Arial", '', 10)
+        for _, row in resumo.iterrows():
+            pdf.cell(0, 8, f"{row['Escola']}: {row['Proficiência_TRI']:.1f} pts", ln=True)
+            
     return pdf.output(dest='S').encode('latin-1')
 
 # --- INTERFACE ---
 st.sidebar.title("Portal SAEPI-JF")
-perfil = st.sidebar.selectbox("Perfil", ["Professor", "Gestor"])
 
-if perfil == "Professor":
-    st.header("Lançamento de Resultados")
-    tabs = st.tabs(["Individual", "Planilha"])
+# Filtros Globais na Sidebar
+perfil = st.sidebar.selectbox("Perfil de Acesso", ["👨‍🏫 Professor", "📊 Gestor"])
+disciplina = st.sidebar.selectbox("Disciplina", ["Matemática", "Português"])
+serie_selecionada = st.sidebar.selectbox("Série/Ano", ["2º Ano", "5º Ano", "9º Ano"])
+
+if perfil == "👨‍🏫 Professor":
+    st.header(f"Lançamento: {disciplina} - {serie_selecionada}")
+    tabs = st.tabs(["Individual", "Lote (Excel)"])
     
     with tabs[0]:
-        nome = st.text_input("Nome do Aluno")
+        nome = st.text_input("Nome do Estudante")
+        c1, c2 = st.columns(2)
+        esc_input = c1.text_input("Nome da Escola")
+        turma_input = c2.text_input("Turma")
+        
+        st.write("Marque os acertos:")
         cols = st.columns(4)
         resps = []
         for i in range(1, 23):
             with cols[(i-1)%4]:
-                r = st.checkbox(f"Q{i:02d}")
+                r = st.checkbox(f"Q{i:02d}", key=f"check_{i}")
                 resps.append(1 if r else 0)
-        if st.button("Calcular"):
+        if st.button("Calcular Proficiência"):
             n = calcular_score_tri(resps, itens_config)
-            st.success(f"Nota: {n:.1f}")
+            st.metric("Resultado", f"{n:.1f}")
 
     with tabs[1]:
-        arq = st.file_uploader("Upload Excel", type="xlsx", key="p1")
+        arq = st.file_uploader("Subir Planilha da Turma", type="xlsx", key="upload_prof")
         if arq:
             dfp = pd.read_excel(arq)
             qs = [f'Q{i:02d}' for i in range(1, 23)]
-            dfp['Proficiência_TRI'] = dfp[qs].apply(lambda x: calcular_score_tri(x.tolist(), itens_config), axis=1)
-            st.dataframe(dfp[['Nome', 'Proficiência_TRI']])
-
-else:
-    st.header("Painel do Gestor")
-    arq_g = st.file_uploader("Upload Planilha Municipal", type="xlsx", key="g1")
-    if arq_g:
-        dfg = pd.read_excel(arq_g)
-        qs = [f'Q{i:02d}' for i in range(1, 23)]
-        dfg['Proficiência_TRI'] = dfg[qs].apply(lambda x: calcular_score_tri(x.tolist(), itens_config), axis=1)
-        
-        m_mun = dfg['Proficiência_TRI'].mean()
-        st.metric("Média Municipal", f"{m_mun:.1f}")
-        
-        st.bar_chart(dfg.groupby('Escola')['Proficiência_TRI'].mean())
-        
-        percentuais = dfg[qs].mean() * 100
-        criticas = percentuais[percentuais < 50].index.tolist()
-        alertas = [f"Questao {q}: Baixo acerto" for q in criticas]
-        
-        # O ERRO ESTAVA AQUI: As aspas agora estão fechadas corretamente
-        if st.button("📄 Gerar PDF"):
-            pdf_bytes = gerar_pdf(dfg, m_mun, alertas)
-            b64 = base64.b64encode(pdf_bytes).decode()
-            href = f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_JF.pdf">Clique aqui para baixar o PDF</a>'
-            st.markdown(href, unsafe_allow_html=True)
+            if all(c in dfp.columns for c in qs):
+                dfp['Proficiência_TRI'] = dfp[qs].apply(lambda x: calcular_score_tri(x
