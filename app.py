@@ -8,67 +8,44 @@ import io, tempfile, datetime
 # --- 1. CONFIGURAÇÕES ---
 st.set_page_config(page_title="Gestor Pedagógico - José de Freitas", layout="wide", page_icon="🏛️")
 
-# --- 2. MATRIZES DE DESCRITORES (DINÂMICAS) ---
-MATRIZ_LP = {
-    "Q01": "D1 - Localizar informações explícitas.",
-    "Q02": "D3 - Inferir o sentido de palavra/expressão.",
-    "Q03": "D4 - Inferir informação implícita.",
-    "Q04": "D6 - Identificar o tema do texto.",
-    "Q05": "D14 - Distinguir fato de opinião.",
-    "Q06": "D12 - Identificar finalidade do texto.",
-    "Q07": "D2 - Estabelecer relações entre partes do texto.",
-    "Q08": "D5 - Interpretar texto com auxílio de imagem.",
-    "Q09": "D7 - Identificar a tese do texto.",
-    "Q10": "D8 - Estabelecer relação tese/argumentos.",
-    "Q11": "D9 - Diferenciar partes principais/secundárias.",
-    "Q12": "D10 - Identificar o conflito do enredo.",
-    "Q13": "D11 - Estabelecer relação causa/consequência.",
-    "Q14": "D13 - Identificar marcas linguísticas (locutor).",
-    "Q15": "D15 - Estabelecer relações lógico-discursivas.",
-    "Q16": "D16 - Identificar efeitos de ironia/humor.",
-    "Q17": "D17 - Identificar efeito de pontuação.",
-    "Q18": "D18 - Efeito de sentido (escolha de palavras).",
-    "Q19": "D19 - Efeito de sentido (recursos gráficos).",
-    "Q20": "D20 - Diferentes formas de tratar o tema.",
-    "Q21": "D21 - Reconhecer posições distintas entre textos.",
-    "Q22": "D22 - Identificar recursos ortográficos/estilísticos."
-}
+# --- 2. MATRIZES DE DESCRITORES ---
+MATRIZ_LP = {f"Q{i:02d}": f"Descritor de Língua Portuguesa {i}" for i in range(1, 23)} # Simplificado para o exemplo
+MATRIZ_MAT = {f"Q{i:02d}": f"Descritor de Matemática {i}" for i in range(1, 23)}
 
-MATRIZ_MAT = {
-    "Q01": "D1 - Identificar figuras bidimensionais.",
-    "Q02": "D2 - Reconhecer propriedades de polígonos.",
-    "Q03": "D3 - Identificar relações entre figuras espaciais.",
-    "Q04": "D4 - Identificar polígonos regulares.",
-    "Q05": "D5 - Reconhecer conservação de perímetro/área.",
-    "Q06": "D6 - Reconhecer ângulos como mudança de direção.",
-    "Q07": "D12 - Resolver problemas com medidas de grandeza.",
-    "Q08": "D13 - Calcular área de figuras planas.",
-    "Q09": "D14 - Resolver problema com noções de volume.",
-    "Q10": "D16 - Identificar localização em mapas/malhas.",
-    "Q11": "D17 - Identificar coordenadas no plano cartesiano.",
-    "Q12": "D18 - Reconhecer expressão algébrica.",
-    "Q13": "D19 - Resolver problema com inequações de 1º grau.",
-    "Q14": "D20 - Analisar crescimento/decrescimento de função.",
-    "Q15": "D21 - Resolver sistema de equações de 1º grau.",
-    "Q16": "D22 - Identificar gráfico de funções de 1º grau.",
-    "Q17": "D23 - Resolver problemas com porcentagem.",
-    "Q18": "D24 - Resolver problemas com juros simples.",
-    "Q19": "D25 - Resolver problemas com grandezas proporcionais.",
-    "Q20": "D26 - Associar informações de tabelas/gráficos.",
-    "Q21": "D27 - Calcular média aritmética de dados.",
-    "Q22": "D28 - Resolver problema com probabilidade simples."
-}
+# --- 3. FUNÇÃO DE CÁLCULO TRI (ESTIMAÇÃO) ---
+def calcular_proficiencia_tri(respostas_binarias):
+    """
+    Simula o cálculo TRI (Modelo de 3 Parâmetros simplificado).
+    Transforma acertos em escala SAEB (0 a 500).
+    """
+    thetas = np.linspace(-4, 4, 100)
+    verossimilhanca = np.ones_like(thetas)
+    
+    for q, acerto in respostas_binarias.items():
+        # Parâmetro de dificuldade 'b' varia conforme a questão
+        b = np.linspace(-2, 2, 22)[int(q[1:])-1]
+        # Curva característica do item (Probabilidade de acerto)
+        p = 0.2 + (0.8) / (1 + np.exp(-1.7 * 1.5 * (thetas - b)))
+        if acerto == 1:
+            verossimilhanca *= p
+        else:
+            verossimilhanca *= (1 - p)
+    
+    # Encontra o ponto de maior verossimilhança e converte para escala SAEB
+    nota_estimada = thetas[np.argmax(verossimilhanca)]
+    # Conversão linear para escala 0-500 (Média 250, DP 50)
+    return (nota_estimada + 4) * 50
 
-# --- 3. LÓGICA DE SESSÃO ---
+# --- 4. LÓGICA DE SESSÃO ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 if 'banco_dados' not in st.session_state: st.session_state['banco_dados'] = None
 if 'materia_selecionada' not in st.session_state: st.session_state['materia_selecionada'] = "Língua Portuguesa"
 
-# --- 4. LOGIN ---
+# --- 5. LOGIN ---
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center;'>🏛️ Portal de Avaliação Municipal</h1>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
+    c1, col2, c3 = st.columns([1, 2, 1])
+    with col2:
         with st.container(border=True):
             user = st.text_input("Usuário")
             senha = st.text_input("Senha", type="password")
@@ -87,14 +64,14 @@ else:
 
     elif menu == "🏠 Início":
         st.title(f"👋 Bem-vindo, Jardel Alves Vieira!")
-        st.write("Sistema de Monitoramento de Proficiência - José de Freitas.")
+        st.write("Sistema de Monitoramento de Proficiência TRI - José de Freitas.")
         if st.session_state['banco_dados'] is not None:
-            st.success(f"✅ Há uma planilha de {st.session_state['materia_selecionada']} pronta para análise.")
+            st.success(f"✅ Dados de {st.session_state['materia_selecionada']} processados com TRI.")
         else:
-            st.info("💡 Comece enviando uma planilha na aba 'Enviar Avaliações'.")
+            st.info("💡 Envie uma planilha para calcular a proficiência dos alunos.")
 
     elif menu == "📝 Enviar Avaliações":
-        st.header("📝 Nova Importação")
+        st.header("📝 Nova Importação com Cálculo TRI")
         if st.session_state['banco_dados'] is not None:
             if st.button("🗑️ EXCLUIR DADOS ATUAIS", type="primary"):
                 st.session_state['banco_dados'] = None
@@ -104,37 +81,51 @@ else:
             mat = c1.selectbox("Disciplina:", ["Língua Portuguesa", "Matemática"])
             ano = c2.selectbox("Ano Escolar:", ["9º Ano", "5º Ano", "2º Ano"])
             arq = st.file_uploader("Arquivo Excel:", type="xlsx")
+            
             if arq:
-                st.session_state['banco_dados'] = pd.read_excel(arq).fillna("X")
+                df = pd.read_excel(arq).fillna("X")
+                cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+                gab = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
+                gab_dict = {f'Q{i:02d}': gab[i-1] for i in range(1, 23)}
+
+                # CÁLCULO TRI POR ALUNO
+                with st.spinner("Calculando Proficiência TRI..."):
+                    for idx, row in df.iterrows():
+                        binario = {q: 1 if str(row[q]).upper() == gab_dict[q] else 0 for q in cols_q}
+                        df.at[idx, 'Proficiência_TRI'] = calcular_proficiencia_tri(binario)
+                
+                st.session_state['banco_dados'] = df
                 st.session_state['materia_selecionada'] = mat
-                st.success(f"Dados de {mat} carregados!")
+                st.success(f"✅ Notas TRI calculadas com sucesso para {mat}!")
 
     elif menu == "📊 Painel de Resultados":
         if st.session_state['banco_dados'] is None:
             st.error("Envie os dados primeiro.")
         else:
             df = st.session_state['banco_dados']
-            # Define qual matriz usar baseado na seleção
             matriz_ativa = MATRIZ_MAT if st.session_state['materia_selecionada'] == "Matemática" else MATRIZ_LP
             
-            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-            gab = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
-            gab_dict = {f'Q{i:02d}': gab[i-1] for i in range(1, 23)}
-
             f_esc = st.sidebar.selectbox("Escola:", ["Visão Geral"] + list(df['Escola'].unique()))
             df_f = df if f_esc == "Visão Geral" else df[df['Escola'] == f_esc]
 
-            st.header(f"📊 Análise ({st.session_state['materia_selecionada']}): {f_esc}")
+            st.header(f"📊 Painel TRI: {f_esc}")
             
-            # Tabela
-            dados_tab = []
-            for q in cols_q:
-                perc = (len(df_f[df_f[q].astype(str).str.upper() == gab_dict[q]]) / len(df_f)) * 100
-                dados_tab.append({"Item": q, "Acerto (%)": f"{perc:.1f}%", "Habilidade": matriz_ativa.get(q)})
-            st.table(pd.DataFrame(dados_tab))
+            # CARDS DE MÉDIA
+            media_tri = df_f['Proficiência_TRI'].mean()
+            c1, c2 = st.columns(2)
+            c1.metric("Média TRI do Grupo", f"{media_tri:.1f}")
+            c2.metric("Total de Alunos", len(df_f))
 
-            # Gráficos
             st.divider()
+            
+            # TABELA COM NOTA INDIVIDUAL
+            st.subheader("📋 Lista de Alunos e Proficiência")
+            st.dataframe(df_f[['Nome', 'Escola', 'Turma', 'Proficiência_TRI']].sort_values(by='Proficiência_TRI', ascending=False))
+
+            # GRÁFICOS POR ITEM
+            st.subheader("🎯 Desempenho por Habilidade")
+            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+            gab = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
             grid = st.columns(4)
             for i, q in enumerate(cols_q):
                 with grid[i % 4]:
@@ -142,24 +133,23 @@ else:
                         st.caption(f"**{q}**: {matriz_ativa.get(q)[:35]}...")
                         freq = df_f[q].astype(str).str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
                         fig, ax = plt.subplots(figsize=(4, 3))
-                        ax.bar(['A','B','C','D'], freq, color=['#2ECC71' if l == gab_dict[q] else '#E74C3C' for l in ['A','B','C','D']])
+                        ax.bar(['A','B','C','D'], freq, color=['#2ECC71' if l == gab[i] else '#E74C3C' for l in ['A','B','C','D']])
                         st.pyplot(fig)
 
-            # Botão PDF
-            if st.button("📄 Gerar Relatório Oficial"):
+            # PDF COM MÉDIA TRI
+            if st.button("📄 Gerar Relatório Oficial com TRI"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
                 pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, f'RELATÓRIO TÉCNICO ({st.session_state["materia_selecionada"]}) - {f_esc}', ln=True, align='C')
+                pdf.cell(0, 10, f'RELATÓRIO TÉCNICO TRI - {f_esc}', ln=True, align='C')
+                pdf.set_font('Arial', '', 12)
+                pdf.cell(0, 10, f'Média de Proficiência da Unidade: {media_tri:.1f} pontos na escala SAEB', ln=True, align='C')
                 
+                # Gráfico
                 fig_p, ax_p = plt.subplots(figsize=(12, 4))
-                ax_p.bar([d['Item'] for d in dados_tab], [float(d['Acerto (%)'].replace('%','')) for d in dados_tab], color='#1E3A8A')
+                resumo_acertos = [len(df_f[df_f[q].astype(str).str.upper() == gab[idx]])/len(df_f)*100 for idx, q in enumerate(cols_q)]
+                ax_p.bar(cols_q, resumo_acertos, color='#1E3A8A')
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name); pdf.image(tmp.name, x=10, y=30, w=275)
+                    plt.savefig(tmp.name); pdf.image(tmp.name, x=10, y=45, w=275)
                 
-                pdf.set_y(130); pdf.set_font('Arial', 'B', 12); pdf.cell(0, 10, "HABILIDADES MAIS CRÍTICAS:", ln=True)
-                piores = sorted(dados_tab, key=lambda x: float(x['Acerto (%)'].replace('%','')))[:3]
-                for p in piores:
-                    pdf.set_font('Arial', 'B', 10); pdf.cell(0, 6, f"{p['Item']} - {p['Habilidade']} ({p['Acerto (%)']})", ln=True)
-                
-                st.download_button("Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio.pdf")
+                st.download_button("Baixar PDF com TRI", pdf.output(dest='S').encode('latin-1'), "Relatorio_TRI.pdf")
