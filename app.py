@@ -49,7 +49,7 @@ GABARITOS = {
     "Língua Portuguesa": {f'Q{i:02d}': g for i, g in enumerate(['A','D','B','C','A','D','B','C','B','A','D','C','B','A','D','C','B','B','A','D','C','A'], 1)}
 }
 
-# --- 3. FUNÇÕES TÉCNICAS (TRI E ARQUIVOS) ---
+# --- 3. FUNÇÕES TÉCNICAS ---
 def calcular_tri(respostas_binarias):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
@@ -57,8 +57,7 @@ def calcular_tri(respostas_binarias):
         b = np.linspace(-2, 2, 22)[int(q[1:])-1]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * 1.5 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
-    theta_f = thetas[np.argmax(verossimilhanca)]
-    return (theta_f + 4) * 50
+    return (thetas[np.argmax(verossimilhanca)] + 4) * 50
 
 def obter_nivel(score):
     if score < 150: return "Abaixo do Básico", "#FF4B4B"
@@ -72,38 +71,15 @@ def gerar_excel(df):
         df.to_excel(writer, index=False)
     return output.getvalue()
 
-# --- 4. INTERFACE DO USUÁRIO ---
+# --- 4. INTERFACE ---
 st.title("📊 Protótipo de Inteligência Educacional - Matriz TRI")
 st.markdown("---")
 
 disciplina = st.sidebar.selectbox("Disciplina:", ["Matemática", "Língua Portuguesa"])
 serie = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
 
-if st.sidebar.button("📂 Gerar Planilha de Teste"):
-    data = {"Nome": [f"Aluno {i}" for i in range(1, 11)], "Escola": ["Escola Modelo"]*10}
-    for i in range(1, 23): data[f'Q{i:02d}'] = np.random.choice(['A','B','C','D'], 10)
-    st.sidebar.download_button("⬇️ Baixar Modelo", gerar_excel(pd.DataFrame(data)), "modelo_saepi.xlsx")
-
-uploaded_file = st.file_uploader("Suba a planilha Excel para processamento", type="xlsx")
+uploaded_file = st.file_uploader("Suba a planilha Excel", type="xlsx")
 
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-    gabarito_atual = GABARITOS[disciplina]
-    mapa_atual = MAPA_HABILIDADES.get(disciplina, {})
-
-    for idx, row in df.iterrows():
-        binario = {q: 1 if str(row[q]).upper() == gabarito_atual[q] else 0 for q in cols_q}
-        df.at[idx, 'Proficiência'] = calcular_tri(binario)
-
-    media_geral = df['Proficiência'].mean()
-    nivel_txt, cor_nivel = obter_nivel(media_geral)
-
-    # Dashboard Principal
-    c1, c2 = st.columns([1, 2])
-    with c1:
-        st.metric("Média de Proficiência", f"{media_geral:.1f}")
-        st.markdown(f"<div style='background-color:{cor_nivel}; padding:20px; border-radius:10px; color:white; text-align:center;'><h3>{nivel_txt}</h3></div>", unsafe_allow_html=True)
-        st.download_button("📊 Baixar Resultados (Excel)", gerar_excel(df), "resultados_tri.xlsx")
-
-    with c2:
+    cols_q = [f'Q{i:02d}' for i in range(1,
