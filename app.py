@@ -71,8 +71,8 @@ if menu == "Lançamento Individual":
         else: st.success("Nível: Proficiente/Avançado")
 
 elif menu == "Processar Planilha Excel":
-    st.subheader("📂 Upload de Dados da Turma")
-    arquivo = st.file_uploader("Selecione o Excel (.xlsx)", type=["xlsx"])
+    st.subheader("📂 Processamento e Relatórios Gerenciais")
+    arquivo = st.file_uploader("Suba o Excel com colunas: 'Escola', 'Turma', 'Nome' e Q01-Q22", type=["xlsx"])
     
     if arquivo:
         try:
@@ -80,16 +80,37 @@ elif menu == "Processar Planilha Excel":
             colunas_q = [f'Q{i:02d}' for i in range(1, 23)]
             
             if all(c in df.columns for c in colunas_q):
-                # O ERRO ESTAVA AQUI: Agora chamando o nome correto da função
+                # 1. Cálculo da TRI para cada aluno
                 df['Proficiência_TRI'] = df[colunas_q].apply(lambda x: calcular_score_tri(x.tolist(), itens_config), axis=1)
                 
-                st.success("✅ Processamento TRI concluído!")
-                st.dataframe(df[['Nome', 'Proficiência_TRI']])
+                # 2. Criação das Abas de Relatório
+                aba1, aba2, aba3 = st.tabs(["📋 Lista Geral", "🏫 Por Escola", "👥 Por Turma"])
                 
-                # Resumo da Turma
-                media_turma = df['Proficiência_TRI'].mean()
-                st.info(f"Média de Proficiência da Turma: {media_turma:.1f}")
+                with aba1:
+                    st.write("### Desempenho Individual")
+                    st.dataframe(df[['Escola', 'Turma', 'Nome', 'Proficiência_TRI']].sort_values(by='Proficiência_TRI', ascending=False))
+                
+                with aba2:
+                    st.write("### Média de Proficiência por Escola")
+                    relatorio_escola = df.groupby('Escola')['Proficiência_TRI'].mean().reset_index()
+                    st.bar_chart(relatorio_escola.set_index('Escola'))
+                    st.table(relatorio_escola.style.format({'Proficiência_TRI': '{:.1f}'}))
+                
+                with aba3:
+                    st.write("### Média de Proficiência por Turma")
+                    # Agrupa por Escola e Turma para evitar confusão entre escolas diferentes
+                    relatorio_turma = df.groupby(['Escola', 'Turma'])['Proficiência_TRI'].mean().reset_index()
+                    st.dataframe(relatorio_turma.style.format({'Proficiência_TRI': '{:.1f}'}))
+                
+                # 3. Botão de Exportação Final
+                st.divider()
+                st.download_button(
+                    label="📥 Baixar Relatório Final Processado",
+                    data=df.to_csv(index=False).encode('utf-8'),
+                    file_name="relatorio_final_saepi.csv",
+                    mime="text/csv"
+                )
             else:
-                st.error("Planilha fora do padrão. Verifique se as colunas são de Q01 a Q22.")
+                st.error("Verifique se a planilha possui as colunas Q01 a Q22.")
         except Exception as e:
-            st.error(f"Erro inesperado: {e}")
+            st.error(f"Erro no processamento: {e}")
