@@ -8,7 +8,7 @@ import io, tempfile, os
 # --- 1. CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Sistema de Inteligência Educacional", layout="wide", page_icon="📊")
 
-# --- 2. MATRIZES DE DESCRITORES (HABILIDADES REAIS) ---
+# --- 2. MATRIZES DE DESCRITORES (HABILIDADES) ---
 MATRIZ_LP = {
     "Q01": "D1 - Localizar informações explícitas.", "Q02": "D3 - Inferir o sentido de palavra/expressão.",
     "Q03": "D4 - Inferir informação implícita.", "Q04": "D6 - Identificar o tema do texto.",
@@ -44,18 +44,18 @@ def calcular_tri(respostas):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
     for i, (q, acerto) in enumerate(respostas.items()):
-        b = np.linspace(-2.5, 2.5, 22)[i] # Dificuldade gradual
+        b = np.linspace(-2.5, 2.5, 22)[i]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
     theta_final = thetas[np.argmax(verossimilhanca)]
-    return (theta_final + 4) * 50 # Converte para escala 0-400
+    return (theta_final + 4) * 50
 
-# --- 4. CONTROLE DE ACESSO ---
+# --- 4. CONTROLE DE SESSÃO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Portal de Avaliação</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Portal de Inteligência Educacional</h1>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         with st.container(border=True):
@@ -68,125 +68,26 @@ if not st.session_state['autenticado']:
                 else: st.error("Acesso negado.")
 else:
     # --- BARRA LATERAL ---
-    st.sidebar.title("Navegação")
-    menu = st.sidebar.radio("Ir para:", ["🏠 Início", "📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
+    menu = st.sidebar.radio("Navegação:", ["🏠 Início", "📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
 
     if menu == "🚪 Sair":
-        st.session_state.clear() # Limpa TUDO para deslogar de verdade
+        st.session_state.clear() # Limpa a sessão
         st.rerun()
 
     elif menu == "🏠 Início":
-        st.title(f"👋 Bem-vindo, Jardel Alves Vieira!")
+        st.title("👋 Bem-vindo, Jardel Alves Vieira!")
         
-        st.markdown("### 📘 Guia de Utilização do Sistema")
+        st.markdown("### 📘 Como operar o sistema")
         with st.container(border=True):
             st.write("""
-            Este sistema foi desenvolvido para realizar a gestão pedagógica baseada em evidências. 
-            Abaixo, entenda como operar cada etapa:
-            
-            1. **Preparação do Arquivo:** Sua planilha Excel deve conter as colunas 'Nome', 'Escola', 'Turma' e as questões de 'Q01' a 'Q22'.
-            2. **Análise de Distratores:** No Painel Analítico, você verá gráficos de barras para cada questão. 
-               - **Barra Verde:** Percentual de alunos que acertaram.
-               - **Barra Vermelha:** Percentual de alunos que caíram em 'pegadinhas' (distratores).
-            3. **Relatórios:** O sistema gera um PDF gerencial que identifica automaticamente quais habilidades precisam de reforço imediato.
+            Este sistema foi desenhado para facilitar a análise de desempenho escolar de José de Freitas.
+            1. **Importação:** Utilize arquivos Excel com as colunas de Q01 a Q22 e informações de Escola/Turma.
+            2. **Análise TRI:** A nota (0-400) reflete a proficiência real, punindo respostas inconsistentes (chutes).
+            3. **Distratores:** Identifique se os alunos estão errando por falta de base ou por confusão entre alternativas similares.
+            4. **Relatórios:** Gere o diagnóstico em PDF para reuniões pedagógicas.
             """)
 
-        st.markdown("### 🔬 Entendendo a TRI (Teoria de Resposta ao Item)")
-        with st.expander("Clique para ver a fundamentação matemática"):
+        st.markdown("### 🔬 Fundamentação Estatística (TRI)")
+        with st.expander("Detalhes da Teoria de Resposta ao Item"):
             st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7a_i(\theta - b_i)}}")
-            st.write("""
-            Ao contrário da nota clássica (contagem de acertos), a TRI considera o **padrão de resposta**:
-            - **Consistência:** Se um aluno acerta questões difíceis mas erra as muito fáceis, o sistema entende que houve "chute" e calibra a nota para baixo.
-            - **Escala de Proficiência:** Os resultados são apresentados na escala de **0 a 400**, permitindo comparar o desempenho com as médias nacionais do SAEB.
-            """)
-
-    elif menu == "📝 Importar Dados":
-        st.header("📝 Upload de Resultados")
-        c1, c2, c3 = st.columns(3)
-        disc = c1.selectbox("Disciplina:", ["Língua Portuguesa", "Matemática"])
-        ano = c2.selectbox("Ano Escolar:", ["2º Ano", "5º Ano", "9º Ano"])
-        arq = st.file_uploader("Selecione o Excel (.xlsx)", type="xlsx")
-
-        if arq:
-            df = pd.read_excel(arq).fillna("N/A")
-            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-            with st.spinner("Processando Matriz Pedagógica..."):
-                for idx, row in df.iterrows():
-                    resps_bin = {q: 1 if str(row[q]).upper() == GABARITO[i] else 0 for i, q in enumerate(cols_q)}
-                    df.at[idx, 'Prof_TRI'] = calcular_tri(resps_bin)
-                
-                st.session_state['banco_dados'] = df
-                st.session_state['mat_ativa'] = disc
-                st.session_state['ano_ativo'] = ano
-                st.success("✅ Dados processados com sucesso!")
-
-    elif menu == "📊 Painel Analítico":
-        if st.session_state.get('banco_dados') is not None:
-            df = st.session_state['banco_dados']
-            matriz = MATRIZ_MAT if st.session_state['mat_ativa'] == "Matemática" else MATRIZ_LP
-            
-            st.header(f"📊 Análise: {st.session_state['mat_ativa']} - {st.session_state['ano_ativo']}")
-            st.metric("Média Geral de Proficiência", f"{df['Prof_TRI'].mean():.1f}")
-            
-            st.divider()
-            
-            stats_para_pdf = []
-            grid = st.columns(3)
-            
-            for i, q in enumerate([f'Q{i:02d}' for i in range(1, 23)]):
-                # Estatísticas de marcação
-                counts = df[q].astype(str).str.upper().value_counts(normalize=True) * 100
-                opts = ['A', 'B', 'C', 'D']
-                vals = [counts.get(o, 0) for o in opts]
-                acerto_perc = counts.get(GABARITO[i], 0)
-                
-                stats_para_pdf.append({"Item": q, "Acerto": acerto_perc, "Hab": matriz.get(q), "Gab": GABARITO[i]})
-                
-                with grid[i % 3]:
-                    with st.container(border=True):
-                        st.subheader(f"Questão {q}")
-                        st.write(f"Gabarito: **{GABARITO[i]}**")
-                        
-                        fig, ax = plt.subplots(figsize=(4, 2.5))
-                        cores = ['#2ECC71' if o == GABARITO[i] else '#E74C3C' for o in opts]
-                        ax.bar(opts, vals, color=cores)
-                        ax.set_ylim(0, 100)
-                        ax.set_ylabel("% de escolha")
-                        st.pyplot(fig)
-                        plt.close(fig)
-                        
-                        st.info(f"**Habilidade:** {matriz.get(q)}")
-
-            # --- RELATÓRIO PDF CORRIGIDO ---
-            st.divider()
-            if st.button("📄 Gerar Relatório Técnico em PDF"):
-                pdf = FPDF(orientation='L', unit='mm', format='A4')
-                pdf.add_page()
-                
-                def f_text(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
-                
-                pdf.set_font('Arial', 'B', 20)
-                pdf.cell(0, 15, f_text(f"DIAGNÓSTICO: {st.session_state['mat_ativa']}"), ln=True, align='C')
-                
-                # Gráfico Geral do Município
-                df_res = pd.DataFrame(stats_para_pdf)
-                fig_g, ax_g = plt.subplots(figsize=(12, 5))
-                ax_g.bar(df_res['Item'], df_res['Acerto'], color='#1E3A8A')
-                ax_g.set_title("Visao Geral de Acertos por Item")
-                ax_g.set_ylim(0, 105)
-                
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name)
-                    plt.close(fig_g)
-                    pdf.image(tmp.name, x=15, y=40, w=265)
-                os.unlink(tmp.name)
-
-                # Página de Análise Pedagógica
-                pdf.add_page()
-                pdf.set_font('Arial', 'B', 16); pdf.cell(0, 10, f_text("🔍 Análise de Habilidades"), ln=True)
-                
-                df_rank = df_res.sort_values(by="Acerto")
-                
-                pdf.ln(5)
-                pdf.set_font('Arial', 'B', 12); pdf.cell(0, 10, f_text("⚠️ PRIORIDADE DE INTERVENÇÃO (Menores Médias):"), ln=True)
-                pdf.set_font('Arial', '',
+            st.write("A proficiência ($\theta$) é calculada com base na dificuldade do item ($b_i$) e no parâmetro de ac
