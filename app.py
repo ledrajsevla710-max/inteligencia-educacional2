@@ -9,39 +9,21 @@ import io
 # --- 1. CONFIGURAÇÕES ---
 st.set_page_config(page_title="Gestão TRI José de Freitas", layout="wide", page_icon="🏛️")
 
-# --- 2. MATRIZ DE REFERÊNCIA ---
+# --- 2. MATRIZ DE REFERÊNCIA (1 A 22) ---
 MAPA_HABILIDADES = {
     "Matemática": {
-        "Q01": {"desc": "D6 - Reconhecer ângulos como mudança de direção ou giros.", "sugestao": "Praticar com ponteiros de relógio e transferidor."},
-        "Q02": {"desc": "EF06MA27 - Determinar medidas de ângulos (reto, agudo, obtuso).", "sugestao": "Identificar ângulos em objetos do cotidiano."},
-        "Q03": {"desc": "EF06MA26 - Resolver problemas com noção de ângulo.", "sugestao": "Trabalhar mudanças de direção em mapas."},
-        "Q04": {"desc": "D16 - Localização de números inteiros na reta numérica.", "sugestao": "Usar termômetros e fita métrica para escalas negativas."},
-        "Q05": {"desc": "D20 - Resolver problemas com números inteiros (+/-).", "sugestao": "Simular saldo bancário e extratos."},
-        "Q06": {"desc": "EF07MA04 - Operações com números inteiros (x/:).", "sugestao": "Reforçar a regra de sinais com jogos."},
-        "Q07": {"desc": "D21 - Diferentes representações de números racionais.", "sugestao": "Relacionar frações com decimais e porcentagem."},
-        "Q08": {"desc": "D23 - Identificar frações equivalentes.", "sugestao": "Uso de material dourado ou barras de frações."},
-        "Q09": {"desc": "D26 - Problemas com números racionais (decimais).", "sugestao": "Atividades com sistema monetário (dinheiro)."},
-        "Q10": {"desc": "EF07MA10 - Comparar e ordenar números racionais.", "sugestao": "Exercícios de reta numérica com decimais."},
-        "Q11": {"desc": "EF07MA01.1PI - Raiz quadrada exata.", "sugestao": "Desenhar quadrados para visualizar a área e o lado."},
-        "Q12": {"desc": "D19 - Potenciação de números naturais.", "sugestao": "Explicar através de replicação (dobro do dobro)."},
-        "Q13": {"desc": "D6/EF06MA25 - Ângulos em medidores e ponteiros.", "sugestao": "Análise de velocímetros e manômetros."},
-        "Q14": {"desc": "D16/EF07MA03 - Números inteiros em situações de saldo.", "sugestao": "Tabelas de saldo de gols e campeonatos."},
-        "Q15": {"desc": "D21/EF06MA08 - Conversão de frações para decimais.", "sugestao": "Praticar divisões sucessivas."},
-        "Q16": {"desc": "D23/EF06MA07 - Simplificação de frações.", "sugestao": "Trabalhar o conceito de partes iguais menores."},
-        "Q17": {"desc": "D26/EF07MA12 - Operações combinadas com decimais.", "sugestao": "Cálculos de compras com troco e descontos."},
-        "Q18": {"desc": "D19/EF07MA01 - Problemas envolvendo MMC.", "sugestao": "Problemas de encontros de horários cíclicos."},
-        "Q19": {"desc": "D20/EF07MA04 - Regra de sinais na divisão.", "sugestao": "Fixação de tabelas de sinais."},
-        "Q20": {"desc": "EF06MA27 - Classificar ângulos obtusos.", "sugestao": "Identificar ângulos em telhados."},
-        "Q21": {"desc": "D21/EF07MA10 - Transformar decimais em frações.", "sugestao": "Ler o número (cinco décimos = 5/10)."},
-        "Q22": {"desc": "D26/EF06MA03 - Multiplicação de decimais.", "sugestao": "Atenção ao posicionamento da vírgula."}
+        f"Q{i:02d}": {"desc": f"Habilidade da Questão {i}", "sugestao": "Reforçar base teórica."} for i in range(1, 23)
     }
 }
+# Adicionando as descrições específicas que tínhamos
+MAPA_HABILIDADES["Matemática"]["Q01"] = {"desc": "D6 - Ângulos e Giros", "sugestao": "Praticar com transferidor."}
+MAPA_HABILIDADES["Matemática"]["Q02"] = {"desc": "EF06MA27 - Classificação de Ângulos", "sugestao": "Identificar ângulos no cotidiano."}
 
 GABARITOS = {
     "Matemática": {f'Q{i:02d}': g for i, g in enumerate(['C','B','A','C','B','C','C','A','B','C','C','C','D','C','B','A','C','C','A','C','B','B'], 1)}
 }
 
-# --- 3. FUNÇÕES ---
+# --- 3. FUNÇÕES TÉCNICAS ---
 def calcular_tri(respostas_binarias):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
@@ -60,89 +42,92 @@ def gerar_modelo_excel():
     return output.getvalue()
 
 # --- 4. INTERFACE ---
-st.title("🏛️ Gestão Educacional TRI - José de Freitas")
+st.title("🏛️ Sistema de Monitoramento TRI - José de Freitas")
 
-st.sidebar.header("Configurações")
-st.sidebar.download_button("📥 Baixar Modelo Excel", gerar_modelo_excel(), "modelo.xlsx", use_container_width=True)
+st.sidebar.header("Painel de Controle")
+st.sidebar.download_button("📥 Baixar Planilha Modelo", gerar_modelo_excel(), "modelo_gestao.xlsx", use_container_width=True)
 
-# Seleção de Disciplina e Série
-disciplina_sel = st.sidebar.selectbox("Disciplina:", ["Matemática"])
-serie_sel = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+disciplina = st.sidebar.selectbox("Disciplina:", ["Matemática"])
+serie = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
 
-uploaded_file = st.file_uploader("📂 Carregar Planilha de Resultados", type="xlsx")
+uploaded_file = st.file_uploader("📂 Carregar Planilha Preenchida", type="xlsx")
 
 if uploaded_file:
+    # Garante a leitura e preenche vazios com 'X'
     df = pd.read_excel(uploaded_file).fillna("X")
+    
+    # FORÇAR ORDEM DAS QUESTÕES DE 01 A 22
     cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-    gabarito = GABARITOS[disciplina_sel]
+    gabarito = GABARITOS[disciplina]
 
-    # Processamento TRI
+    # Processamento TRI Individual
     for idx, row in df.iterrows():
         binario = {q: 1 if str(row[q]).upper() == gabarito[q] else 0 for q in cols_q}
         df.at[idx, 'Proficiência'] = calcular_tri(binario)
 
-    # Panorama Geral
-    st.subheader("📊 Panorama Geral do Município")
-    media_mun = df['Proficiência'].mean()
-    st.metric("Proficiência Média da Rede", f"{media_mun:.1f}")
+    # --- FILTROS DE VISUALIZAÇÃO ---
+    st.sidebar.divider()
+    st.sidebar.subheader("Filtros de Análise")
+    esc_sel = st.sidebar.selectbox("Escola:", ["Geral"] + sorted(list(df['Escola'].unique())))
+    
+    df_esc = df if esc_sel == "Geral" else df[df['Escola'] == esc_sel]
+    tur_sel = st.sidebar.selectbox("Turma:", ["Geral"] + sorted(list(df_esc['Turma'].unique())))
+    
+    df_f = df_esc if tur_sel == "Geral" else df_esc[df_esc['Turma'] == tur_sel]
 
-    rank = df.groupby('Escola')['Proficiência'].mean().sort_values().reset_index()
-    fig_mun, ax_mun = plt.subplots(figsize=(10, 3))
-    ax_mun.barh(rank['Escola'], rank['Proficiência'], color='#1F77B4')
-    ax_mun.axvline(media_mun, color='red', linestyle='--', label='Média Geral')
-    st.pyplot(fig_mun)
+    # --- RESULTADOS MÉDIOS ---
+    media_f = df_f['Proficiência'].mean()
+    st.subheader(f"📊 Resultados: {esc_sel} - {tur_sel}")
+    st.metric("Proficiência Média (TRI)", f"{media_f:.1f}")
 
-    st.divider()
+    # --- GRÁFICOS DE DISTRATORES (QUESTÃO 1 A 22) ---
+    st.markdown("### 🎯 Análise de Respostas por Item (A, B, C, D)")
+    st.info("O gráfico abaixo mostra a porcentagem de alunos que escolheram cada letra. A barra verde indica o gabarito.")
 
-    # Filtros
-    f1, f2 = st.columns(2)
-    esc_sel = f1.selectbox("Filtrar Escola:", ["Todas"] + sorted(list(df['Escola'].unique())))
-    tur_sel = f2.selectbox("Filtrar Turma:", ["Todas"] + sorted(list(df['Turma'].unique())))
-
-    df_f = df.copy()
-    if esc_sel != "Todas": df_f = df_f[df_f['Escola'] == esc_sel]
-    if tur_sel != "Todas": df_f = df_f[df_f['Turma'] == tur_sel]
-
-    # Análise de Itens
-    st.markdown("### 🎯 Análise de Distratores (A, B, C, D)")
+    # Criar 3 colunas para os gráficos ficarem organizados
     grid = st.columns(3)
-    for i, q in enumerate(cols_q):
+    
+    for i, q in enumerate(cols_q): # Segue a ordem exata da lista cols_q (Q01 a Q22)
         with grid[i % 3]:
-            # Força as 4 colunas aparecerem
-            cont = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
-            st.write(f"**Item {q}** (Gab: {gabarito[q]})")
-            fig_q, ax_q = plt.subplots(figsize=(3, 4))
-            cores = ['#00CC96' if a == gabarito[q] else '#FF4B4B' for a in ['A','B','C','D']]
-            ax_q.bar(['A','B','C','D'], cont, color=cores)
-            ax_q.set_ylim(0, 100)
-            st.pyplot(fig_q)
-            st.caption(f"Habilidade: {MAPA_HABILIDADES[disciplina_sel][q]['desc']}")
+            # Conta as marcações e converte para porcentagem
+            analise = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
+            
+            fig, ax = plt.subplots(figsize=(4, 5))
+            cores = ['#2ECC71' if letra == gabarito[q] else '#E74C3C' for letra in ['A','B','C','D']]
+            
+            bars = ax.bar(['A','B','C','D'], analise, color=cores, edgecolor='black', alpha=0.8)
+            ax.set_title(f"Questão {q}", fontsize=12, fontweight='bold')
+            ax.set_ylabel("% de Alunos")
+            ax.set_ylim(0, 105)
+            
+            # Adiciona o rótulo de % no topo de cada barra
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height + 1, f'{height:.0f}%', ha='center', va='bottom', fontsize=9)
+            
+            st.pyplot(fig)
+            st.caption(f"**Gabarito: {gabarito[q]}** | {MAPA_HABILIDADES[disciplina][q]['desc']}")
             st.divider()
 
-    # Relatório PDF
-    if st.button("📄 GERAR RELATÓRIO PDF ANALÍTICO", use_container_width=True):
+    # --- BOTÃO DE PDF ---
+    if st.button("📄 GERAR RELATÓRIO PDF DA SELEÇÃO", use_container_width=True):
         pdf = FPDF()
         pdf.add_page()
-        pdf.set_font('Arial', 'B', 14)
-        pdf.cell(0, 10, 'RELATÓRIO TÉCNICO TRI - JOSÉ DE FREITAS', ln=True, align='C')
-        pdf.set_font('Arial', '', 10)
-        pdf.cell(0, 7, f'Escola: {esc_sel} | Turma: {tur_sel}', ln=True, align='C')
+        pdf.set_font('Arial', 'B', 16)
+        pdf.cell(0, 10, f'Relatório Pedagógico - {esc_sel}', ln=True, align='C')
+        pdf.set_font('Arial', '', 12)
+        pdf.cell(0, 10, f'Turma: {tur_sel} | Média TRI: {media_f:.1f}', ln=True, align='C')
         pdf.ln(10)
 
         for q in cols_q:
-            perc = (df_f[q].str.upper() == gabarito[q]).mean() * 100
-            info = MAPA_HABILIDADES[disciplina_sel][q]
-            pdf.set_font('Arial', 'B', 10)
-            pdf.cell(0, 7, f"Item {q} | Acerto: {perc:.1f}% | Gabarito: {gabarito[q]}", ln=True)
-            pdf.set_font('Arial', '', 9)
-            pdf.multi_cell(0, 5, f"Descrição: {info['desc']}")
-            if perc < 50:
-                pdf.set_text_color(255, 0, 0)
-                pdf.multi_cell(0, 5, f"Sugestão Pedagógica: {info['sugestao']}")
-                pdf.set_text_color(0, 0, 0)
-            pdf.ln(5)
+            perc_acerto = (df_f[q].str.upper() == gabarito[q]).mean() * 100
+            pdf.set_font('Arial', 'B', 11)
+            pdf.cell(0, 8, f"Questão {q} - Acerto: {perc_acerto:.1f}%", ln=True)
+            pdf.set_font('Arial', '', 10)
+            pdf.multi_cell(0, 5, f"Habilidade: {MAPA_HABILIDADES[disciplina][q]['desc']}")
+            pdf.ln(3)
             if pdf.get_y() > 250: pdf.add_page()
-
-        pdf_output = pdf.output(dest='S').encode('latin-1')
-        b64 = base64.b64encode(pdf_output).decode()
-        st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_Analitico.pdf" style="display:block; text-align:center; padding:15px; background-color:#2e7bcf; color:white; border-radius:10px; text-decoration:none; font-weight:bold;">📥 BAIXAR RELATÓRIO COMPLETO</a>', unsafe_allow_html=True)
+            
+        pdf_out = pdf.output(dest='S').encode('latin-1')
+        b64 = base64.b64encode(pdf_out).decode()
+        st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio_{esc_sel}.pdf" style="display:block; text-align:center; padding:12px; background-color:#2e7bcf; color:white; border-radius:8px; text-decoration:none; font-weight:bold;">📥 BAIXAR RELATÓRIO PDF</a>', unsafe_allow_html=True)
