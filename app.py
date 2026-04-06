@@ -107,52 +107,84 @@ else:
                 df = pd.read_excel(arq).fillna("X")
                 cols_q = [f'Q{i:02d}' for i in range(1, 23)]
                 gab = ['A','B','C','D','A','B','C','D','C','A','A','B','C','D','C','C','C','A','C','A','A','B']
-                for idx, row in df.iterrows():
-                    binario = {q: 1 if str(row[q]).upper() == gab[int(q[1:])-1] else 0 for q in cols_q}
-                    df.at[idx, 'Proficiência_TRI'] = calcular_tri(binario)
+                
+                # Barra de progresso para o cálculo TRI
+                with st.spinner("Calculando Proficiência TRI dos alunos..."):
+                    for idx, row in df.iterrows():
+                        binario = {q: 1 if str(row[q]).upper() == gab[int(q[1:])-1] else 0 for q in cols_q}
+                        df.at[idx, 'Proficiência_TRI'] = calcular_tri(binario)
+                
                 st.session_state['banco_dados'] = df
                 st.session_state['mat_ativa'] = mat
-                st.success("Dados processados!")
+                st.success("Dados processados com sucesso!")
 
     elif menu == "📊 Painel de Resultados":
         if st.session_state['banco_dados'] is not None:
             df = st.session_state['banco_dados']
-            matriz = MATRIZ_MAT if st.session_state['mat_ativa'] == "Matemática" else MATRIZ_LP
+            matriz = MATRIZ_MAT if st.session_state.get('mat_ativa') == "Matemática" else MATRIZ_LP
             f_esc = st.sidebar.selectbox("Escola:", ["Visão Geral"] + list(df['Escola'].unique()))
             df_f = df if f_esc == "Visão Geral" else df[df['Escola'] == f_esc]
 
-            st.header(f"📊 Análise: {f_esc} ({st.session_state['mat_ativa']})")
+            st.header(f"📊 Análise: {f_esc}")
             
-            # Ranking de Acertos para o Relatório
+            # --- CORREÇÃO DO ERRO KEYERROR ---
+            if 'Proficiência_TRI' in df_f.columns:
+                media_tri = df_f['Proficiência_TRI'].mean()
+                st.metric("Média de Proficiência TRI", f"{media_tri:.1f}")
+            else:
+                st.warning("⚠️ Proficiência TRI ainda não calculada. Por favor, reenvie a planilha.")
+
+            # Ranking de Acertos
             stats = []
             for q in [f'Q{i:02d}' for i in range(1, 23)]:
                 gab = ['A','B','C','D','A','B','C','D','C','A','A','B','C','D','C','C','C','A','C','A','A','B']
                 idx = int(q[1:])-1
                 perc = (len(df_f[df_f[q].astype(str).str.upper() == gab[idx]]) / len(df_f)) * 100
-                stats.append({"Item": q, "Acerto": perc, "Habilidade": matriz[q]})
+                stats.append({"Item": q, "Acerto": perc, "Habilidade": matriz.get(q, "Habilidade não definida")})
             
             df_stats = pd.DataFrame(stats).sort_values(by="Acerto", ascending=False)
 
-            # Botão PDF Robusto
-            if st.button("📄 Gerar Relatório Técnico com Plano de Ação"):
+            # Botão PDF
+            if st.button("📄 Gerar Relatório Técnico"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
                 pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, f'RELATÓRIO DE DESEMPENHO - {f_esc} ({st.session_state["mat_ativa"]})', ln=True, align='C')
+                pdf.cell(0, 10, f'RELATÓRIO - {f_esc} ({st.session_state.get("mat_ativa", "Geral")})', ln=True, align='C')
                 
-                # Gráfico
+                # Gráfico Geral
                 fig, ax = plt.subplots(figsize=(12, 4))
                 ax.bar(df_stats['Item'], df_stats['Acerto'], color='#1E3A8A')
-                ax.set_ylim(0, 105); ax.set_ylabel('% de Acerto')
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     plt.savefig(tmp.name); pdf.image(tmp.name, x=10, y=30, w=275)
                 
-                # Segunda Página: Descrições e Intervenção
+                # Descrições e Destaques
                 pdf.add_page()
-                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, "🏆 PONTOS FORTES (Melhores Resultados):", ln=True)
-                pdf.set_font('Arial', '', 10)
+                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, "🏆 PONTOS FORTES E ⚠️ PONTOS DE ATENÇÃO", ln=True)
+                
+                pdf.set_font('Arial', 'B', 10)
+                pdf.cell(0, 7, "MELHORES RESULTADOS:", ln=True)
+                pdf.set_font('Arial', '', 9)
                 for _, r in df_stats.head(3).iterrows():
-                    pdf.cell(0, 7, f"- {r['Item']}: {r['Habilidade']} (Acerto: {r['Acerto']:.1f}%)", ln=True)
+                    pdf.cell(0, 5, f"- {r['Item']}: {r['Habilidade']} ({r['Acerto']:.1f}%)", ln=True)
 
                 pdf.ln(5)
-                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, "⚠️ PONTOS DE ATENÇÃO E
+                pdf.set_font('Arial', 'B', 10)
+                pdf.cell(0, 7, "MENORES RESULTADOS (INTERVENÇÃO NECESSÁRIA):", ln=True)
+                for _, r in df_stats.tail(3).iterrows():
+                    pdf.set_font('Arial', 'B', 9)
+                    pdf.cell(0, 5, f"Questão {r['Item']}: {r['Habilidade']} ({r['Acerto']:.1f}%)", ln=True)
+                    pdf.set_font('Arial', 'I', 8)
+                    pdf.multi_cell(0, 5, f"Sugestão: {sugerir_intervencao(r['Item'], matriz)}")
+                
+                pdf.ln(5)
+                pdf.set_font('Arial', 'B', 12); pdf.cell(0, 10, "📚 TODAS AS HABILIDADES TRABALHADAS:", ln=True)
+                pdf.set_font('Arial', '', 8)
+                y_start = pdf.get_y()
+                for i, r in enumerate(stats):
+                    x = 10 if i < 11 else 150
+                    y = y_start + ((i % 11) * 5)
+                    pdf.text(x, y, f"{r['Item']}: {r['Habilidade']} ({r['Acerto']:.1f}%)")
+
+                st.download_button("📥 Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio_Pedagogico.pdf")
+
+            st.table(df_stats)
