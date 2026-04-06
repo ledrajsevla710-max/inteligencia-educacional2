@@ -62,4 +62,77 @@ def gerar_modelo_excel():
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
         df_m.to_excel(writer, index=False)
     return output.getvalue()
+t.title("🏛️ Gestão Municipal de Educação - TRI")
+
+st.sidebar.header("Ferramentas")
+st.sidebar.download_button("📥 Baixar Planilha Modelo", gerar_modelo_excel(), "modelo.xlsx", use_container_width=True)
+
+serie = st.sidebar.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+uploaded_file = st.file_uploader("Suba a planilha (Excel)", type="xlsx")
+
+if uploaded_file:
+    df = pd.read_excel(uploaded_file).fillna("X")
+    cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+    gabarito = GABARITOS["Matemática"]
+
+    for idx, row in df.iterrows():
+        binario = {q: 1 if str(row[q]).upper() == gabarito[q] else 0 for q in cols_q}
+        df.at[idx, 'Proficiência'] = calcular_tri(binario)
+
+    # Panorama Geral
+    media_mun = df['Proficiência'].mean()
+    st.metric("Média Municipal", f"{media_mun:.1f}")
     
+    rank = df.groupby('Escola')['Proficiência'].mean().sort_values().reset_index()
+    fig_mun, ax_mun = plt.subplots(figsize=(10, 3))
+    ax_mun.barh(rank['Escola'], rank['Proficiência'], color='#1F77B4')
+    ax_mun.axvline(media_mun, color='red', linestyle='--', label='Média Geral')
+    st.pyplot(fig_mun)
+
+    st.divider()
+    
+    # Filtros
+    f1, f2 = st.columns(2)
+    esc_sel = f1.selectbox("Escola:", ["Todas"] + sorted(list(df['Escola'].unique())))
+    tur_sel = f2.selectbox("Turma:", ["Todas"] + sorted(list(df['Turma'].unique())))
+
+    df_f = df.copy()
+    if esc_sel != "Todas": df_f = df_f[df_f['Escola'] == esc_sel]
+    if tur_sel != "Todas": df_f = df_f[df_f['Turma'] == tur_sel]
+
+    # Gráficos de Alternativas (4 Colunas)
+    grid = st.columns(3)
+    for i, q in enumerate(cols_q):
+        with grid[i % 3]:
+            cont = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
+            st.write(f"**Item {q}** (Gab: {gabarito[q]})")
+            fig_q, ax_q = plt.subplots(figsize=(3, 4))
+            cores = ['#00CC96' if a == gabarito[q] else '#FF4B4B' for a in ['A','B','C','D']]
+            ax_q.bar(['A','B','C','D'], cont, color=cores)
+            ax_q.set_ylim(0, 100)
+            st.pyplot(fig_q)
+            st.caption(f"Habilidade: {MAPA_HABILIDADES['Matemática'][q]['desc']}")
+
+    # Relatório PDF
+    if st.button("📄 GERAR RELATÓRIO PDF"):
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font('Arial', 'B', 14)
+        pdf.cell(0, 10, 'RELATÓRIO TÉCNICO TRI', ln=True, align='C')
+        pdf.ln(10)
+        for q in cols_q:
+            perc = (df_f[q].str.upper() == gabarito[q]).mean() * 100
+            info = MAPA_HABILIDADES["Matemática"][q]
+            pdf.set_font('Arial', 'B', 10)
+            pdf.cell(0, 7, f"Item {q} | Acerto: {perc:.1f}%", ln=True)
+            pdf.set_font('Arial', '', 9)
+            pdf.multi_cell(0, 5, f"Habilidade: {info['desc']}")
+            if perc < 50:
+                pdf.set_text_color(255, 0, 0)
+                pdf.multi_cell(0, 5, f"Sugestão: {info['sugestao']}")
+                pdf.set_text_color(0, 0, 0)
+            pdf.ln(4)
+        
+        pdf_bytes = pdf.output(dest='S').encode('latin-1')
+        b64 = base64.b64encode(pdf_bytes).decode()
+        st.markdown(f'<a href="data:application/octet-stream;base64,{b64}" download="Relatorio.pdf" style="display:block; text-align:center; padding:15px; background-color:#2e7bcf; color:white; border-radius:10px; text-decoration:none;">📥 BAIXAR RELATÓRIO</a>', unsafe_allow_html=True)
