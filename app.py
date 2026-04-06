@@ -45,20 +45,14 @@ GABARITO = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 
 
 def obter_nivel_escala(valor, disciplina):
     if disciplina == "Língua Portuguesa":
-        if valor < 200: 
-            return "Muito Crítico", "#D32F2F"
-        if valor < 250: 
-            return "Crítico", "#F57C00"
-        if valor < 300: 
-            return "Intermediário", "#FBC02D"
+        if valor < 200: return "Muito Crítico", "#D32F2F"
+        if valor < 250: return "Crítico", "#F57C00"
+        if valor < 300: return "Intermediário", "#FBC02D"
         return "Adequado", "#388E3C"
     else:
-        if valor < 225: 
-            return "Muito Crítico", "#D32F2F"
-        if valor < 275: 
-            return "Crítico", "#F57C00"
-        if valor < 325: 
-            return "Intermediário", "#FBC02D"
+        if valor < 225: return "Muito Crítico", "#D32F2F"
+        if valor < 275: return "Crítico", "#F57C00"
+        if valor < 325: return "Intermediário", "#FBC02D"
         return "Adequado", "#388E3C"
 
 def calcular_tri(respostas):
@@ -86,7 +80,7 @@ if not st.session_state['autenticado']:
                 u = st.text_input("Usuário")
                 s = st.text_input("Senha", type="password")
                 st.markdown("---")
-                st.caption("🛡️ **Política de Privacidade:** Os dados inseridos são para fins pedagógicos e diagnósticos de rede municipal, tratados conforme a LGPD.")
+                st.caption("🛡️ **Política de Privacidade:** Dados para fins pedagógicos tratados conforme LGPD.")
                 if st.button("Entrar no Painel", use_container_width=True):
                     if u in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u] == s:
                         st.session_state['autenticado'] = True
@@ -100,12 +94,12 @@ if not st.session_state['autenticado']:
                 st.subheader("Cadastro de Gestor")
                 n_u = st.text_input("Defina seu Usuário")
                 n_s = st.text_input("Defina sua Senha", type="password")
-                concorda = st.checkbox("Aceito os termos de privacidade de dados educacionais.")
+                concorda = st.checkbox("Aceito os termos de privacidade.")
                 if st.button("Finalizar Cadastro", use_container_width=True):
                     if n_u and n_s and concorda:
                         st.session_state['usuarios_db'][n_u] = n_s
-                        st.success("✅ Cadastro realizado! Faça login na aba ao lado.")
-                    else: st.warning("Preencha todos os campos e aceite os termos.")
+                        st.success("✅ Cadastro realizado! Faça login.")
+                    else: st.warning("Preencha tudo e aceite os termos.")
 
 # --- 5. SISTEMA PRINCIPAL ---
 else:
@@ -115,4 +109,73 @@ else:
         st.session_state['autenticado'] = False
         st.rerun()
 
-    elif menu:
+    elif menu == "🏠 Início":
+        st.title("👋 Bem-vindo ao Sistema!")
+        st.markdown("### 📊 Escalas de Proficiência (SAEB)")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info("**Língua Portuguesa**")
+            st.write("🔴 < 200: Muito Crítico | 🟠 < 250: Crítico | 🟡 < 300: Intermediário | 🟢 > 300: Adequado")
+        with c2:
+            st.success("**Matemática**")
+            st.write("🔴 < 225: Muito Crítico | 🟠 < 275: Crítico | 🟡 < 325: Intermediário | 🟢 > 325: Adequado")
+        
+        st.markdown("### 🔬 Teoria de Resposta ao Item (TRI)")
+        st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7 \cdot a_i \cdot (\theta - b_i)}}")
+        st.write("A TRI calcula a proficiência estimando a habilidade real do aluno.")
+
+    elif menu == "📝 Importar Dados":
+        st.header("📝 Importação")
+        c1, c2, c3 = st.columns(3)
+        disc = c1.selectbox("Disciplina:", ["Língua Portuguesa", "Matemática"])
+        ano = c2.selectbox("Ano Escolar:", ["2º Ano", "5º Ano", "9º Ano"])
+        arq = st.file_uploader("Arquivo Excel (.xlsx)", type="xlsx")
+
+        if arq:
+            df = pd.read_excel(arq).fillna("N/A")
+            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
+            for idx, row in df.iterrows():
+                res_bin = {q: 1 if str(row[q]).upper() == GABARITO[i] else 0 for i, q in enumerate(cols_q)}
+                df.at[idx, 'Prof_TRI'] = calcular_tri(res_bin)
+            st.session_state['banco_dados'] = df
+            st.session_state['mat_ativa'] = disc
+            st.session_state['ano_ativo'] = ano
+            st.success("✅ Processado!")
+
+    elif menu == "📊 Painel Analítico":
+        if st.session_state.get('banco_dados') is not None:
+            df = st.session_state['banco_dados']
+            matriz = MATRIZ_MAT if st.session_state['mat_ativa'] == "Matemática" else MATRIZ_LP
+            media = df['Prof_TRI'].mean()
+            nivel, cor = obter_nivel_escala(media, st.session_state['mat_ativa'])
+            
+            st.markdown(f"<div style='padding:15px; border-radius:10px; background-color:{cor}; color:white; text-align:center; font-size:20px;'>Média: {media:.1f} | Nível: {nivel}</div>", unsafe_allow_html=True)
+            
+            grid = st.columns(3)
+            stats_list = []
+            for i, q in enumerate([f'Q{i:02d}' for i in range(1, 23)]):
+                counts = df[q].astype(str).str.upper().value_counts(normalize=True) * 100
+                stats_list.append({"Item": q, "Acerto": counts.get(GABARITO[i], 0), "Hab": matriz.get(q), "Gab": GABARITO[i]})
+                with grid[i % 3]:
+                    with st.container(border=True):
+                        st.write(f"**Questão {q}**")
+                        fig, ax = plt.subplots(figsize=(4, 2.5))
+                        ax.bar(['A','B','C','D'], [counts.get(o,0) for o in ['A','B','C','D']], color=['#2ECC71' if o == GABARITO[i] else '#E74C3C' for o in ['A','B','C','D']])
+                        st.pyplot(fig); plt.close(fig)
+                        st.caption(f"Hab: {matriz.get(q)}")
+
+            if st.button("📄 Relatório PDF"):
+                pdf = FPDF(orientation='L', unit='mm', format='A4')
+                pdf.add_page()
+                def f_txt(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
+                pdf.set_font('Arial', 'B', 18); pdf.cell(0, 15, f_txt(f"RELATÓRIO: {st.session_state['mat_ativa']}"), ln=True, align='C')
+                
+                pdf.add_page()
+                df_rank = pd.DataFrame(stats_list).sort_values(by="Acerto")
+                pdf.set_text_color(200, 0, 0); pdf.cell(0, 10, f_txt("⚠️ ALERTA: Menor Domínio"), ln=True)
+                pdf.set_font('Arial', '', 9); pdf.set_text_color(0,0,0)
+                for _, r in df_rank.head(6).iterrows():
+                    pdf.multi_cell(0, 6, f_txt(f"Q{r['Item']} ({r['Acerto']:.1f}%) - {r['Hab']}"), border='B')
+                
+                pdf_bytes = pdf.output(dest='S').encode('latin-1')
+                st.download_button(label="📥 Baixar PDF", data=pdf_bytes, file_name="Relatorio.pdf", mime="application/pdf")
