@@ -8,67 +8,58 @@ import io, tempfile, datetime
 # --- 1. CONFIGURAÇÕES ---
 st.set_page_config(page_title="Gestor TRI Municipal", layout="wide", page_icon="🏛️")
 
-# --- 2. MATRIZ DE HABILIDADES (Edite os textos abaixo com sua matriz oficial) ---
-MATRIZ_OFICIAL = {
-    "Q01": "D1 - Localizar informações explícitas em um texto.",
-    "Q02": "D3 - Inferir o sentido de uma palavra ou expressão.",
-    "Q03": "D4 - Inferir uma informação implícita em um texto.",
-    "Q04": "D6 - Identificar o tema de um texto.",
-    "Q05": "D12 - Identificar a finalidade de textos de diferentes gêneros.",
-    "Q06": "D2 - Estabelecer relações entre partes de um texto.",
-    "Q07": "D5 - Interpretar texto com auxílio de material gráfico.",
-    "Q08": "D7 - Identificar a tese de um texto.",
-    "Q09": "D8 - Estabelecer relação entre a tese e os argumentos.",
-    "Q10": "D9 - Diferenciar as partes principais das secundárias em um texto.",
-    "Q11": "D10 - Identificar o conflito gerador do enredo.",
-    "Q12": "D11 - Estabelecer relação de causa e consequência.",
-    "Q13": "D13 - Identificar as marcas linguísticas de um locutor.",
-    "Q14": "D14 - Distinguir um fato de uma opinião.",
-    "Q15": "D15 - Estabelecer relações lógico-discursivas.",
-    "Q16": "D16 - Identificar efeitos de ironia ou humor.",
-    "Q17": "D17 - Identificar o efeito de sentido decorrente da pontuação.",
-    "Q18": "D18 - Reconhecer o efeito de sentido decorrente de escolha de palavras.",
-    "Q19": "D19 - Reconhecer o efeito de sentido decorrente de recursos gráficos.",
-    "Q20": "D20 - Reconhecer diferentes formas de tratar uma informação.",
-    "Q21": "D21 - Reconhecer posições distintas entre dois textos.",
-    "Q22": "D22 - Identificar o efeito de sentido decorrente da exploração de recursos ortográficos."
-}
+# --- 2. MATRIZ DE HABILIDADES ---
+MATRIZ_OFICIAL = {f"Q{i:02d}": f"Descritor de Habilidade do item {i}" for i in range(1, 23)}
 
-# --- 3. LÓGICA DE ACESSO ---
+# --- 3. LÓGICA DE SESSÃO ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 if 'banco_dados' not in st.session_state: st.session_state['banco_dados'] = None
 
+# --- 4. TELA DE LOGIN ---
 if not st.session_state['autenticado']:
     st.title("🏛️ Portal TRI Municipal")
-    user = st.text_input("Usuário")
-    senha = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if user == "12345" and senha == "000":
-            st.session_state['autenticado'] = True
-            st.rerun()
+    with st.container(border=True):
+        user = st.text_input("Usuário")
+        senha = st.text_input("Senha", type="password")
+        if st.button("Entrar", use_container_width=True):
+            if user == "12345" and senha == "000":
+                st.session_state['autenticado'] = True
+                st.rerun()
+            else: st.error("Credenciais inválidas.")
+
+# --- 5. PAINEL DO GESTOR ---
 else:
-    menu = st.sidebar.radio("Navegação", ["📊 Dashboard", "⚙️ Importar Dados", "🚪 Sair"])
+    st.sidebar.title("💎 Menu de Gestão")
+    menu = st.sidebar.radio("Navegação", ["⚙️ Importar Dados", "📊 Dashboard Analítico", "🚪 Sair"])
 
     if menu == "🚪 Sair":
         st.session_state['autenticado'] = False
         st.rerun()
 
-    # --- ABA: IMPORTAR DADOS (SEM TRAVA) ---
+    # --- ABA: IMPORTAR DADOS ---
     elif menu == "⚙️ Importar Dados":
-        st.header("⚙️ Importar Avaliações")
-        materia = st.selectbox("Disciplina:", ["Matemática", "Língua Portuguesa"])
-        serie_sistema = st.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+        st.header("⚙️ Central de Importação")
         
-        arquivo = st.file_uploader("Subir Excel", type="xlsx")
-        if arquivo:
-            # Lendo o arquivo sem travas de validação de série
-            df_temp = pd.read_excel(arquivo).fillna("X")
-            st.success(f"✅ Arquivo lido com sucesso! Processando dados de {materia}...")
-            st.session_state['banco_dados'] = df_temp
+        if st.session_state['banco_dados'] is not None:
+            st.warning("⚠️ Já existe uma planilha carregada no sistema.")
+            if st.button("🗑️ EXCLUIR DADOS ATUAIS E RECOMEÇAR", type="primary"):
+                st.session_state['banco_dados'] = None
+                st.rerun()
+        else:
+            materia = st.selectbox("Disciplina:", ["Matemática", "Língua Portuguesa"])
+            arquivo = st.file_uploader("Selecione a Planilha Excel (.xlsx)", type="xlsx")
+            if arquivo:
+                df_temp = pd.read_excel(arquivo).fillna("X")
+                st.success("✅ Planilha carregada com sucesso!")
+                st.session_state['banco_dados'] = df_temp
+                st.info("Vá para a aba 'Dashboard Analítico' para ver os resultados.")
 
     # --- ABA: DASHBOARD ---
-    elif menu == "📊 Dashboard":
-        if st.session_state['banco_dados'] is not None:
+    elif menu == "📊 Dashboard Analítico":
+        if st.session_state['banco_dados'] is None:
+            st.error("🚫 ACESSO BLOQUEADO: Você precisa carregar uma planilha na aba 'Importar Dados' primeiro.")
+            st.image("https://cdn-icons-png.flaticon.com/512/3064/3064155.png", width=100)
+        else:
             df = st.session_state['banco_dados']
             cols_q = [f'Q{i:02d}' for i in range(1, 23)]
             gab = ['A','B','C','D','A','B','C','D','C','A','A','B','C','D','C','C','C','A','C','A','A','B']
@@ -77,9 +68,9 @@ else:
             f_esc = st.sidebar.selectbox("Escola:", ["Geral Município"] + list(df['Escola'].unique()))
             df_f = df if f_esc == "Geral Município" else df[df['Escola'] == f_esc]
 
-            st.header(f"📊 Análise: {f_esc}")
-
-            # 1. TABELA DE ACERTOS COM DESCRIÇÃO DA HABILIDADE
+            st.title(f"📊 Dashboard: {f_esc}")
+            
+            # --- SEÇÃO 1: RESUMO EM TABELA ---
             st.subheader("📋 Percentual de Acertos e Habilidades")
             dados_dashboard = []
             for q in cols_q:
@@ -89,51 +80,47 @@ else:
                 dados_dashboard.append({
                     "Item": q,
                     "Acerto (%)": f"{perc:.1f}%",
-                    "Erro (%)": f"{100 - perc:.1f}%",
-                    "Habilidade/Descritor": MATRIZ_OFICIAL.get(q, "Não mapeada")
+                    "Habilidade": MATRIZ_OFICIAL.get(q, "Não mapeada")
                 })
-            
             st.table(pd.DataFrame(dados_dashboard))
 
-            # --- 2. RELATÓRIO PDF EM PAISAGEM ---
+            # --- SEÇÃO 2: MINI-GRÁFICOS POR QUESTÃO ---
             st.divider()
-            if st.button("📄 Gerar Relatório Profissional (Paisagem)"):
+            st.subheader("🎯 Análise Individual por Item")
+            
+            # Criando colunas para os gráficos pequenos (4 por linha)
+            col_charts = st.columns(4)
+            for i, q in enumerate(cols_q):
+                with col_charts[i % 4]:
+                    with st.container(border=True):
+                        st.write(f"**Item {q}**")
+                        # Cálculo de frequência de respostas (A, B, C, D)
+                        freq = df_f[q].astype(str).str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
+                        
+                        fig, ax = plt.subplots(figsize=(4, 3))
+                        cores = ['#2ECC71' if letra == gab_dict[q] else '#E74C3C' for letra in ['A','B','C','D']]
+                        ax.bar(['A','B','C','D'], freq, color=cores)
+                        ax.set_ylim(0, 100)
+                        st.pyplot(fig)
+                        st.caption(f"{MATRIZ_OFICIAL[q][:30]}...") # Mostra início da habilidade
+
+            # --- SEÇÃO 3: DOWNLOAD RELATÓRIO PAISAGEM ---
+            st.divider()
+            if st.button("📄 Gerar Relatório PDF Profissional (Paisagem)"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
-                pdf.set_font('Arial', 'B', 18)
-                pdf.cell(0, 15, f'RELATÓRIO DE DESEMPENHO - {f_esc}', ln=True, align='C')
+                pdf.set_font('Arial', 'B', 16)
+                pdf.cell(0, 10, f'RELATÓRIO DE DESEMPENHO - {f_esc}', ln=True, align='C')
                 
-                # Gráfico Grande
-                fig, ax = plt.subplots(figsize=(14, 5))
+                # Gráfico Geral para o PDF
+                fig_pdf, ax_pdf = plt.subplots(figsize=(12, 5))
                 questoes = [d['Item'] for d in dados_dashboard]
                 valores = [float(d['Acerto (%)'].replace('%','')) for d in dados_dashboard]
+                ax_pdf.bar(questoes, valores, color='#3498DB')
+                ax_pdf.set_ylim(0, 100)
                 
-                barras = ax.bar(questoes, valores, color='#3498DB', edgecolor='black')
-                ax.set_ylabel('% de Acerto')
-                ax.set_ylim(0, 110) # Margem para os rótulos
-                
-                # Adiciona o valor em cima de cada barra
-                for barra in barras:
-                    height = barra.get_height()
-                    ax.annotate(f'{height:.0f}%', xy=(barra.get_x() + barra.get_width() / 2, height),
-                                xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
-
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                     plt.savefig(tmp.name, bbox_inches='tight')
-                    pdf.image(tmp.name, x=10, y=35, w=275)
+                    pdf.image(tmp.name, x=10, y=40, w=270)
                 
-                # Lista de Habilidades Críticas no PDF
-                pdf.set_y(145)
-                pdf.set_font('Arial', 'B', 12)
-                pdf.cell(0, 10, "Diagnóstico das Habilidades Mais Críticas (Menor Acerto):", ln=True)
-                pdf.set_font('Arial', '', 10)
-                
-                # Ordena pelas 5 piores para o relatório
-                piores = sorted(dados_dashboard, key=lambda x: float(x['Acerto (%)'].replace('%','')))[:5]
-                for p in piores:
-                    txt = f"- {p['Item']}: {p['Habilidade/Descritor']} (Acerto: {p['Acerto (%)']})"
-                    pdf.multi_cell(0, 7, txt.encode('latin-1', 'replace').decode('latin-1'))
-
-                st.download_button("📥 Baixar PDF Paisagem", pdf.output(dest='S').encode('latin-1'), f"Relatorio_{f_esc}.pdf")
-        else:
-            st.info("⚠️ Aguardando envio da planilha para gerar o Dashboard.")
+                st.download_button("📥 Baixar Relatório", pdf.output(dest='S').encode('latin-1'), f"Relatorio_{f_esc}.pdf")
