@@ -5,3 +5,4 @@ fpdf
 matplotlib
 openpyxl
 xlsxwriter
+pip install gspread google-auth
