@@ -8,9 +8,14 @@ import io, tempfile, os
 # --- 1. CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Sistema de Inteligência Educacional", layout="wide", page_icon="📊")
 
-# --- 2. MATRIZES E DEFINIÇÕES ---
+# --- 2. BANCO DE USUÁRIOS (SESSÃO) ---
+# Simulando um banco de dados simples que persiste enquanto o app está aberto
+if 'usuarios_db' not in st.session_state:
+    st.session_state['usuarios_db'] = {"12345": "000"} # Usuário padrão
+
+# --- 3. MATRIZES E DEFINIÇÕES PEDAGÓGICAS ---
 MATRIZ_LP = {
-    "Q01": "D1 - Localizar informações explícitas.", "Q02": "D3 - Inferir o sentido de palavra/expressão.",
+    "Q01": "D1 - Localizar informações explícitas.", "Q02": "D3 - Inferir o sentido de palavra/expression.",
     "Q03": "D4 - Inferir informação implícita.", "Q04": "D6 - Identificar o tema do texto.",
     "Q05": "D14 - Distinguir fato de opinião.", "Q06": "D12 - Identificar finalidade do texto.",
     "Q07": "D2 - Estabelecer relações entre partes do texto.", "Q08": "D5 - Interpretar texto com auxílio de imagem.",
@@ -39,6 +44,18 @@ MATRIZ_MAT = {
 
 GABARITO = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
 
+def obter_nivel_escala(valor, disciplina):
+    if disciplina == "Língua Portuguesa":
+        if valor < 200: return "Muito Crítico", "#D32F2F"
+        if valor < 250: return "Crítico", "#F57C00"
+        if valor < 300: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
+    else:
+        if valor < 225: return "Muito Crítico", "#D32F2F"
+        if valor < 275: return "Crítico", "#F57C00"
+        if valor < 325: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
+
 def calcular_tri(respostas):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
@@ -46,59 +63,58 @@ def calcular_tri(respostas):
         b = np.linspace(-2.5, 2.5, 22)[i]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
-    return (thetas[np.argmax(verossimilhanca)] + 4) * 50
+    theta_final = thetas[np.argmax(verossimilhanca)]
+    return (theta_final + 4) * 50
 
-# --- 3. GESTÃO DE USUÁRIOS (SESSÃO) ---
-if 'usuarios_db' not in st.session_state:
-    st.session_state['usuarios_db'] = {"12345": "000"} # Usuário padrão
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
+# --- 4. TELA DE ACESSO (LOGIN, CADASTRO E PRIVACIDADE) ---
+if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 
-# --- 4. TELA DE ACESSO (LOGIN / CADASTRO) ---
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Inteligência Educacional</h1>", unsafe_allow_html=True)
     
-    tab1, tab2 = st.tabs(["🔐 Entrar", "📝 Criar Conta"])
+    aba_login, aba_cadastro = st.tabs(["🔐 Acessar Sistema", "📝 Criar Nova Conta"])
     
-    with tab1:
-        c1, c2, c3 = st.columns([1, 1.5, 1])
+    with aba_login:
+        c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             with st.container(border=True):
-                u_login = st.text_input("Usuário (CPF ou Matrícula)")
-                s_login = st.text_input("Senha ", type="password")
-                if st.button("Acessar Painel", use_container_width=True):
-                    if u_login in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u_login] == s_login:
+                u = st.text_input("Usuário (CPF ou E-mail)")
+                s = st.text_input("Senha de Acesso", type="password")
+                
+                st.markdown("---")
+                st.caption("🛡️ **Política de Privacidade:** Ao entrar, você concorda que o processamento dos dados educacionais inseridos é de responsabilidade do operador e destina-se exclusivamente a fins pedagógicos, em conformidade com a LGPD.")
+                
+                if st.button("Entrar no Painel", use_container_width=True):
+                    if u in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u] == s:
                         st.session_state['autenticado'] = True
+                        st.session_state['usuario_nome'] = u
                         st.rerun()
                     else: st.error("Usuário ou senha incorretos.")
 
-    with tab2:
-        c1, c2, c3 = st.columns([1, 1.5, 1])
+    with aba_cadastro:
+        c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
             with st.container(border=True):
-                st.subheader("Novo Cadastro")
-                novo_u = st.text_input("Definir Usuário")
-                nova_s = st.text_input("Definir Senha", type="password")
-                conf_s = st.text_input("Confirmar Senha", type="password")
+                st.subheader("Cadastro de Gestor")
+                novo_u = st.text_input("Defina seu Usuário")
+                nova_s = st.text_input("Defina sua Senha", type="password")
+                conf_s = st.text_input("Confirme a Senha", type="password")
                 
-                st.markdown("---")
-                st.warning("⚠️ **Política de Privacidade**")
-                st.caption("""Ao se cadastrar, você concorda que os dados de avaliações submetidos serão utilizados exclusivamente para fins de diagnóstico pedagógico e melhoria do ensino municipal, em conformidade com a LGPD.""")
-                concordo = st.checkbox("Li e aceito os termos de uso de dados educacionais.")
+                concorda = st.checkbox("Li e aceito os termos de privacidade e uso de dados.")
                 
                 if st.button("Finalizar Cadastro", use_container_width=True):
-                    if not concordo:
-                        st.error("Você precisa aceitar a Política de Privacidade.")
+                    if novo_u == "" or nova_s == "":
+                        st.warning("Preencha todos os campos.")
                     elif nova_s != conf_s:
                         st.error("As senhas não coincidem.")
-                    elif novo_u == "" or nova_s == "":
-                        st.error("Preencha todos os campos.")
+                    elif not concorda:
+                        st.error("Você precisa aceitar os termos de privacidade.")
                     else:
                         st.session_state['usuarios_db'][novo_u] = nova_s
-                        st.success("Cadastro realizado! Use a aba 'Entrar'.")
+                        st.success("✅ Conta criada! Volte na aba 'Acessar Sistema' para entrar.")
 
+# --- 5. SISTEMA PÓS-LOGIN ---
 else:
-    # --- 5. SISTEMA LOGADO ---
     menu = st.sidebar.radio("Navegação:", ["🏠 Início", "📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
 
     if menu == "🚪 Sair":
@@ -106,81 +122,13 @@ else:
         st.rerun()
 
     elif menu == "🏠 Início":
-        st.title("👋 Bem-vindo ao Sistema de Diagnóstico!")
-        st.markdown("### 🔬 A Teoria de Resposta ao Item (TRI)")
-        st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7 \cdot a_i \cdot (\theta - b_i)}}")
-        st.info("**Nota Técnica:** A proficiência ($\theta$) avalia a consistência do aprendizado. Acertos em questões difíceis sem base nas fáceis são calibrados para evitar distorções por 'chute'.")
-
-    elif menu == "📝 Importar Dados":
-        st.header("📝 Importação")
+        st.title(f"👋 Bem-vindo ao Sistema!")
+        
+        st.markdown("### 📊 Escalas de Proficiência (Referência SAEB)")
         c1, c2 = st.columns(2)
-        disc = c1.selectbox("Disciplina:", ["Língua Portuguesa", "Matemática"])
-        arq = st.file_uploader("Excel (.xlsx)", type="xlsx")
-        if arq:
-            df = pd.read_excel(arq).fillna("N/A")
-            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-            for idx, row in df.iterrows():
-                res_bin = {q: 1 if str(row[q]).upper() == GABARITO[i] else 0 for i, q in enumerate(cols_q)}
-                df.at[idx, 'Prof_TRI'] = calcular_tri(res_bin)
-            st.session_state['banco_dados'] = df
-            st.session_state['mat_ativa'] = disc
-            st.success("✅ Processamento concluído!")
-
-    elif menu == "📊 Painel Analítico":
-        if st.session_state.get('banco_dados') is not None:
-            df = st.session_state['banco_dados']
-            matriz = MATRIZ_MAT if st.session_state['mat_ativa'] == "Matemática" else MATRIZ_LP
-            stats_list = []
-            
-            st.header(f"📊 Painel Analítico - {st.session_state['mat_ativa']}")
-            grid = st.columns(3)
-            for i, q in enumerate([f'Q{i:02d}' for i in range(1, 23)]):
-                counts = df[q].astype(str).str.upper().value_counts(normalize=True) * 100
-                perc_acerto = counts.get(GABARITO[i], 0)
-                stats_list.append({"Item": q, "Acerto": perc_acerto, "Hab": matriz.get(q), "Gab": GABARITO[i]})
-                
-                with grid[i % 3]:
-                    with st.container(border=True):
-                        st.write(f"Questão {q}")
-                        fig, ax = plt.subplots(figsize=(4, 2))
-                        ax.bar(['A','B','C','D'], [counts.get(o, 0) for o in ['A','B','C','D']], 
-                               color=['#2ECC71' if o == GABARITO[i] else '#E74C3C' for o in ['A','B','C','D']])
-                        st.pyplot(fig); plt.close(fig)
-                        st.caption(matriz.get(q))
-
-            # --- RELATÓRIO PDF COM DESTAQUES ---
-            if st.button("📄 Gerar Relatório Técnico Completo"):
-                pdf = FPDF(orientation='L', unit='mm', format='A4')
-                pdf.add_page()
-                def f_txt(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
-                
-                pdf.set_font('Arial', 'B', 18)
-                pdf.cell(0, 15, f_txt(f"RELATÓRIO PEDAGÓGICO: {st.session_state['mat_ativa']}"), ln=True, align='C')
-                
-                df_res = pd.DataFrame(stats_list).sort_values(by="Acerto")
-                
-                # Gráfico Geral
-                fig_g, ax_g = plt.subplots(figsize=(10, 4))
-                ax_g.bar(df_res['Item'], df_res['Acerto'], color='#1E3A8A')
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name); plt.close(fig_g)
-                    pdf.image(tmp.name, x=15, y=40, w=265)
-                os.unlink(tmp.name)
-
-                pdf.add_page()
-                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, f_txt("📋 Prioridades e Destaques"), ln=True)
-                
-                pdf.set_text_color(200, 0, 0)
-                pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, f_txt("⚠️ ALERTA: Habilidades Críticas"), ln=True)
-                pdf.set_text_color(0, 0, 0); pdf.set_font('Arial', '', 9)
-                for _, r in df_res.head(5).iterrows():
-                    pdf.multi_cell(0, 6, f_txt(f"{r['Item']}: {r['Acerto']:.1f}% - {r['Hab']}"), border='B')
-                
-                pdf.ln(5)
-                pdf.set_text_color(0, 128, 0)
-                pdf.set_font('Arial', 'B', 11); pdf.cell(0, 8, f_txt("🏆 SUCESSO: Habilidades Consolidadas"), ln=True)
-                pdf.set_text_color(0, 0, 0); pdf.set_font('Arial', '', 9)
-                for _, r in df_res.tail(5).iterrows():
-                    pdf.multi_cell(0, 6, f_txt(f"{r['Item']}: {r['Acerto']:.1f}% - {r['Hab']}"), border='B')
-
-                st.download_button("📥 Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Diagnostico.pdf")
+        with c1:
+            st.info("**Língua Portuguesa**")
+            st.write("🔴 < 200: Muito Crítico | 🟠 < 250: Crítico | 🟡 < 300: Intermediário | 🟢 > 300: Adequado", unsafe_allow_html=True)
+        with c2:
+            st.success("**Matemática**")
+            st.write("🔴 < 225
