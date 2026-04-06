@@ -8,7 +8,7 @@ import io, tempfile, os
 # --- 1. CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Sistema de Inteligência Educacional", layout="wide", page_icon="📊")
 
-# --- 2. MATRIZES DE DESCRITORES (HABILIDADES) ---
+# --- 2. MATRIZES E DEFINIÇÕES PEDAGÓGICAS ---
 MATRIZ_LP = {
     "Q01": "D1 - Localizar informações explícitas.", "Q02": "D3 - Inferir o sentido de palavra/expressão.",
     "Q03": "D4 - Inferir informação implícita.", "Q04": "D6 - Identificar o tema do texto.",
@@ -39,6 +39,19 @@ MATRIZ_MAT = {
 
 GABARITO = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
 
+# --- Função de Cores da Escala (Baseada no SAEB) ---
+def obter_nivel_escala(valor, disciplina):
+    if disciplina == "Língua Portuguesa":
+        if valor < 200: return "Muito Crítico", "#D32F2F"
+        if valor < 250: return "Crítico", "#F57C00"
+        if valor < 300: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
+    else: # Matemática
+        if valor < 225: return "Muito Crítico", "#D32F2F"
+        if valor < 275: return "Crítico", "#F57C00"
+        if valor < 325: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
+
 # --- 3. MOTOR DE CÁLCULO TRI ---
 def calcular_tri(respostas):
     thetas = np.linspace(-4, 4, 100)
@@ -51,72 +64,77 @@ def calcular_tri(respostas):
     return (theta_final + 4) * 50
 
 # --- 4. CONTROLE DE SESSÃO ---
-if 'autenticado' not in st.session_state:
-    st.session_state['autenticado'] = False
+if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Portal de Inteligência Educacional</h1>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         with st.container(border=True):
-            u = st.text_input("Usuário")
-            s = st.text_input("Senha", type="password")
+            u = st.text_input("Usuário"); s = st.text_input("Senha", type="password")
             if st.button("Entrar no Sistema", use_container_width=True):
                 if u == "12345" and s == "000":
-                    st.session_state['autenticado'] = True
-                    st.rerun()
+                    st.session_state['autenticado'] = True; st.rerun()
                 else: st.error("Acesso negado.")
 else:
-    # --- BARRA LATERAL ---
     menu = st.sidebar.radio("Navegação:", ["🏠 Início", "📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
 
     if menu == "🚪 Sair":
-        st.session_state.clear()
-        st.rerun()
+        st.session_state.clear(); st.rerun()
 
     elif menu == "🏠 Início":
         st.title("👋 Bem-vindo, Jardel Alves Vieira!")
         
-        st.markdown("### 📘 Manual de Operação")
-        with st.container(border=True):
-            st.write("""
-            Este sistema foi desenvolvido para transformar dados brutos em diagnósticos pedagógicos precisos.
-            
-            1. **Importação:** Utilize arquivos Excel (.xlsx). O sistema espera as colunas nominais e de Q01 a Q22.
-            2. **Análise de Distratores:** No Painel, os gráficos coloridos mostram a escolha dos alunos. A barra verde é o acerto; as vermelhas são os distratores (erros comuns).
-            3. **Relatórios Gerenciais:** Gere documentos em PDF com o ranking automático de habilidades críticas do município.
-            """)
+        st.markdown("### 📊 Escalas de Proficiência (Referência SAEB)")
+        c1, c2 = st.columns(2)
+        with c1:
+            st.info("**Língua Portuguesa**")
+            st.write("🔴 < 200: Muito Crítico | 🟠 < 250: Crítico | 🟡 < 300: Intermediário | 🟢 > 300: Adequado", unsafe_allow_html=True)
+        with c2:
+            st.success("**Matemática**")
+            st.write("🔴 < 225: Muito Crítico | 🟠 < 275: Crítico | 🟡 < 325: Intermediário | 🟢 > 325: Adequado", unsafe_allow_html=True)
 
-        st.markdown("### 🔬 Fundamentação Estatística (TRI)")
-        with st.expander("Explicação Técnica da TRI"):
-            st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7a_i(\theta - b_i)}}")
-            st.write("A proficiência ($\theta$) é calculada com base na dificuldade do item ($b_i$), no poder de discriminação ($a_i$) e no parâmetro de acerto ao acaso ($c_i$).")
+        st.markdown("### 🔬 Desvendando a Fórmula TRI")
+        st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7 \cdot a_i \cdot (\theta - b_i)}}")
+        st.write("""
+        Esta fórmula é o **Modelo Logístico de 3 Parâmetros**. Veja o que cada letra significa:
+        - **$\theta$ (Theta):** É a habilidade real do aluno. O sistema busca o valor de Theta que melhor explica o padrão de acertos e erros.
+        - **$b_i$ (Dificuldade):** Indica o ponto na escala onde a questão é mais eficiente. Questões fáceis têm $b$ baixo; difíceis têm $b$ alto.
+        - **$a_i$ (Discriminação):** É a capacidade da questão de separar alunos que dominam a habilidade dos que não dominam.
+        - **$c_i$ (Chute):** É a probabilidade de um aluno sem nenhuma habilidade acertar a questão ao acaso. No sistema, fixamos em 20% (para questões de 5 alternativas).
+        """)
 
     elif menu == "📝 Importar Dados":
         st.header("📝 Importação de Dados")
         c1, c2, c3 = st.columns(3)
         disc = c1.selectbox("Disciplina:", ["Língua Portuguesa", "Matemática"])
         ano = c2.selectbox("Ano Escolar:", ["2º Ano", "5º Ano", "9º Ano"])
-        arq = st.file_uploader("Selecione o Excel (.xlsx)", type="xlsx")
+        arq = st.file_uploader("Arquivo Excel (.xlsx)", type="xlsx")
 
         if arq:
             df = pd.read_excel(arq).fillna("N/A")
             cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-            with st.spinner("Processando Matriz..."):
+            with st.spinner("Analisando consistência pedagógica..."):
                 for idx, row in df.iterrows():
                     res_bin = {q: 1 if str(row[q]).upper() == GABARITO[i] else 0 for i, q in enumerate(cols_q)}
                     df.at[idx, 'Prof_TRI'] = calcular_tri(res_bin)
                 st.session_state['banco_dados'] = df
                 st.session_state['mat_ativa'] = disc
                 st.session_state['ano_ativo'] = ano
-                st.success("✅ Dados processados com sucesso!")
+                st.success("✅ Dados processados!")
 
     elif menu == "📊 Painel Analítico":
         if st.session_state.get('banco_dados') is not None:
             df = st.session_state['banco_dados']
             matriz = MATRIZ_MAT if st.session_state['mat_ativa'] == "Matemática" else MATRIZ_LP
-            st.header(f"📊 Painel: {st.session_state['mat_ativa']} ({st.session_state['ano_ativo']})")
-            st.metric("Proficiência Média Municipal", f"{df['Prof_TRI'].mean():.1f}")
+            media = df['Prof_TRI'].mean()
+            nivel, cor = obter_nivel_escala(media, st.session_state['mat_ativa'])
+            
+            st.header(f"📊 {st.session_state['mat_ativa']} - {st.session_state['ano_ativo']}")
+            
+            c1, c2 = st.columns(2)
+            c1.metric("Média de Proficiência", f"{media:.1f}")
+            c2.markdown(f"<div style='padding:10px; border-radius:10px; background-color:{cor}; color:white; text-align:center; font-weight:bold;'>Nível de Desempenho: {nivel}</div>", unsafe_allow_html=True)
             
             st.divider()
             grid = st.columns(3)
@@ -124,33 +142,30 @@ else:
             
             for i, q in enumerate([f'Q{i:02d}' for i in range(1, 23)]):
                 counts = df[q].astype(str).str.upper().value_counts(normalize=True) * 100
-                opts = ['A', 'B', 'C', 'D']
-                vals = [counts.get(o, 0) for o in opts]
-                acerto_perc = counts.get(GABARITO[i], 0)
-                stats_list.append({"Item": q, "Acerto": acerto_perc, "Hab": matriz.get(q), "Gab": GABARITO[i]})
+                opts = ['A', 'B', 'C', 'D']; vals = [counts.get(o, 0) for o in opts]
+                stats_list.append({"Item": q, "Acerto": counts.get(GABARITO[i], 0), "Hab": matriz.get(q), "Gab": GABARITO[i]})
                 
                 with grid[i % 3]:
                     with st.container(border=True):
-                        st.write(f"**Questão {q}** (Correta: {GABARITO[i]})")
+                        st.write(f"**Questão {q}** (Gabarito: {GABARITO[i]})")
                         fig, ax = plt.subplots(figsize=(4, 2.5))
-                        cores = ['#2ECC71' if o == GABARITO[i] else '#E74C3C' for o in opts]
-                        ax.bar(opts, vals, color=cores)
+                        cores_bar = ['#2ECC71' if o == GABARITO[i] else '#E74C3C' for o in opts]
+                        ax.bar(opts, vals, color=cores_bar)
                         ax.set_ylim(0, 100)
-                        st.pyplot(fig)
-                        plt.close(fig)
+                        st.pyplot(fig); plt.close(fig)
                         st.info(f"**Habilidade:** {matriz.get(q)}")
 
-            st.divider()
+            # --- RELATÓRIO PDF ---
             if st.button("📄 Gerar Relatório Técnico PDF"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
-                
                 def f_txt(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
                 
                 pdf.set_font('Arial', 'B', 18)
-                pdf.cell(0, 15, f_txt(f"RELATÓRIO DE DESEMPENHO: {st.session_state['mat_ativa']}"), ln=True, align='C')
+                pdf.cell(0, 15, f_txt(f"RELATÓRIO: {st.session_state['mat_ativa']} ({st.session_state['ano_ativo']})"), ln=True, align='C')
+                pdf.set_font('Arial', '', 12)
+                pdf.cell(0, 10, f_txt(f"Proficiência Média: {media:.1f} - Nível: {nivel}"), ln=True, align='C')
                 
-                # Gráfico Geral
                 df_res = pd.DataFrame(stats_list)
                 fig_g, ax_g = plt.subplots(figsize=(12, 5))
                 ax_g.bar(df_res['Item'], df_res['Acerto'], color='#1E3A8A')
@@ -158,26 +173,9 @@ else:
                 ax_g.set_ylim(0, 105)
                 
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                    plt.savefig(tmp.name)
-                    plt.close(fig_g)
-                    pdf.image(tmp.name, x=15, y=40, w=265)
+                    plt.savefig(tmp.name); plt.close(fig_g)
+                    pdf.image(tmp.name, x=15, y=45, w=265)
                 os.unlink(tmp.name)
-
-                pdf.add_page()
-                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, f_txt("📋 Ranking de Habilidades"), ln=True)
-                df_rank = df_res.sort_values(by="Acerto")
-                
-                pdf.ln(5)
-                pdf.set_font('Arial', 'B', 12); pdf.cell(0, 10, f_txt("⚠️ PRIORIDADES (Menor Desempenho):"), ln=True)
-                pdf.set_font('Arial', '', 10)
-                for _, r in df_rank.head(5).iterrows():
-                    pdf.cell(0, 7, f_txt(f"- {r['Item']} ({r['Gab']}): {r['Hab']} -> {r['Acerto']:.1f}%"), ln=True)
-                
-                pdf.ln(5)
-                pdf.set_font('Arial', 'B', 12); pdf.cell(0, 10, f_txt("🏆 DESTAQUES (Maior Desempenho):"), ln=True)
-                pdf.set_font('Arial', '', 10)
-                for _, r in df_rank.tail(5).iterrows():
-                    pdf.cell(0, 7, f_txt(f"- {r['Item']} ({r['Gab']}): {r['Hab']} -> {r['Acerto']:.1f}%"), ln=True)
 
                 pdf_bytes = pdf.output(dest='S').encode('latin-1')
                 st.download_button(label="📥 Baixar PDF", data=pdf_bytes, file_name="Relatorio.pdf", mime="application/pdf")
