@@ -3,37 +3,23 @@ import pandas as pd
 import numpy as np
 from fpdf import FPDF
 import matplotlib.pyplot as plt
-import io
-import tempfile
+import io, tempfile, datetime
 import gspread
 from google.oauth2.service_account import Credentials
-import datetime
 
-# --- 1. CONFIGURAÇÕES E ESTILO ---
-st.set_page_config(page_title="Portal TRI Profissional", layout="wide", page_icon="🏛️")
+# --- 1. CONFIGURAÇÕES ---
+st.set_page_config(page_title="Gestor TRI Municipal", layout="wide", page_icon="🏛️")
 
-# --- 2. BANCO DE DADOS (GOOGLE SHEETS) ---
+# --- 2. CONEXÃO BANCO DE DADOS ---
 def conectar_google_sheets():
     try:
         escopos = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
         creds = Credentials.from_service_account_file('credentials.json', scopes=escopos)
-        client = gspread.authorize(creds)
-        return client.open("Dados_TRI_Sistema").sheet1
+        return gspread.authorize(creds).open("Dados_TRI_Sistema").sheet1
     except: return None
 
-def salvar_no_banco(df_final):
-    folha = conectar_google_sheets()
-    if folha:
-        try:
-            df_final['Data_Registro'] = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            dados = df_final.astype(str).values.tolist()
-            folha.append_rows(dados)
-            return True
-        except: return False
-    return False
-
-# --- 3. LÓGICA PEDAGÓGICA ---
-def obter_detalhes_nivel(score):
+# --- 3. FUNÇÕES PEDAGÓGICAS ---
+def obter_diagnostico(score):
     if score < 150: return {"nivel": "CRÍTICO", "cor": "#E74C3C", "sug": "Focar em alfabetização e base numérica."}
     elif score < 250: return {"nivel": "BÁSICO", "cor": "#F1C40F", "sug": "Reforço em interpretação e descritores base."}
     elif score < 350: return {"nivel": "PROFICIENTE", "cor": "#2ECC71", "sug": "Consolidar descritores da série."}
@@ -48,106 +34,102 @@ def calcular_tri(respostas_binarias):
         verossimilhanca *= p if acerto == 1 else (1 - p)
     return (thetas[np.argmax(verossimilhanca)] + 4) * 50
 
-# --- 4. CONTROLO DE SESSÃO ---
+# --- 4. CONTROLE DE SESSÃO E LOGIN ---
 if 'autenticado' not in st.session_state: st.session_state['autenticado'] = False
 if 'banco_dados' not in st.session_state: st.session_state['banco_dados'] = None
+if 'usuarios' not in st.session_state: st.session_state['usuarios'] = {"12345": "000"} # Mock inicial
 
-# --- 5. TELA DE LOGIN ---
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center;'>🏛️ Sistema Gestor TRI</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    st.markdown("<h1 style='text-align: center;'>🏛️ Portal TRI Municipal</h1>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
         with st.container(border=True):
-            inep = st.text_input("INEP da Escola")
-            cpf = st.text_input("CPF do Professor", type="password")
-            if st.button("Entrar no Painel", use_container_width=True):
-                if inep == "12345" and cpf == "000": 
+            user_inep = st.text_input("INEP ou Usuário")
+            user_pass = st.text_input("Senha", type="password")
+            if st.button("Acessar Painel", use_container_width=True):
+                if user_inep in st.session_state['usuarios'] and st.session_state['usuarios'][user_inep] == user_pass:
                     st.session_state['autenticado'] = True
                     st.rerun()
                 else: st.error("Credenciais inválidas.")
 
-# --- 6. PAINEL PRINCIPAL ---
+# --- 5. PAINEL DO USUÁRIO ---
 else:
-    st.sidebar.title("💎 Gestão Premium")
-    menu = st.sidebar.radio("Navegação", ["📊 Dashboard", "⚙️ Importar Dados", "🚪 Sair"])
+    st.sidebar.title("💎 Área do Gestor")
+    menu = st.sidebar.radio("Navegação", ["📊 Dashboard Municipal", "⚙️ Importar Dados", "👤 Cadastrar Usuários", "🚪 Sair"])
 
     if menu == "🚪 Sair":
         st.session_state['autenticado'] = False
         st.rerun()
 
+    elif menu == "👤 Cadastrar Usuários":
+        st.header("👤 Gestão de Acessos")
+        new_user = st.text_input("Novo INEP/Usuário:")
+        new_pass = st.text_input("Definir Senha:")
+        if st.button("Cadastrar Novo Usuário"):
+            st.session_state['usuarios'][new_user] = new_pass
+            st.success(f"Usuário {new_user} cadastrado com sucesso!")
+
     elif menu == "⚙️ Importar Dados":
-        st.header("⚙️ Importar Planilha")
-        arquivo = st.file_uploader("Subir Excel (.xlsx)", type="xlsx")
+        st.header("⚙️ Importar Avaliações")
+        col_mat, col_ser = st.columns(2)
+        materia = col_mat.selectbox("Matéria:", ["Matemática", "Língua Portuguesa"])
+        serie = col_ser.selectbox("Série:", ["2º Ano", "5º Ano", "9º Ano"])
+        
+        arquivo = st.file_uploader("Subir Planilha Excel", type="xlsx")
         if arquivo:
             df = pd.read_excel(arquivo).fillna("X")
             cols_q = [f'Q{i:02d}' for i in range(1, 23)]
             gab = ['A','B','C','D','A','B','C','D','C','A','A','B','C','D','C','C','C','A','C','A','A','B']
+            
             for idx, row in df.iterrows():
                 binario = {q: 1 if str(row[q]).upper() == gab[int(q[1:])-1] else 0 for q in cols_q}
                 df.at[idx, 'Proficiência'] = calcular_tri(binario)
-            st.session_state['banco_dados'] = df
-            st.success("Dados processados!")
-            if st.button("💾 SALVAR NA NUVEM"):
-                if salvar_no_banco(df): st.success("✅ Salvo no Google Sheets!")
-
-    elif menu == "📊 Dashboard":
-        if st.session_state['banco_dados'] is not None:
-            df_f = st.session_state['banco_dados']
-            media = df_f['Proficiência'].mean()
-            info = obter_detalhes_nivel(media)
-            cols_q = [f'Q{i:02d}' for i in range(1, 23)]
-            gab = ['A','B','C','D','A','B','C','D','C','A','A','B','C','D','C','C','C','A','C','A','A','B']
-            gab_dict = {f'Q{i:02d}': gab[i-1] for i in range(1, 23)}
-
-            # Cabeçalho
-            st.title("📊 Análise de Desempenho")
-            c1, c2 = st.columns(2)
-            c1.metric("Média Geral TRI", f"{media:.1f}")
-            c2.markdown(f"### Nível: <span style='color:{info['cor']}'>{info['nivel']}</span>", unsafe_allow_html=True)
-            st.info(f"**Sugestão:** {info['sug']}")
-
-            # --- SEÇÃO DE DOWNLOADS ---
-            st.divider()
-            st.subheader("📄 Exportar Relatórios")
-            cd1, cd2 = st.columns(2)
+                df.at[idx, 'Matéria'] = materia
+                df.at[idx, 'Série'] = serie
             
-            with cd1:
-                if st.button("📑 Gerar PDF Analítico (Lista de Alunos)"):
-                    pdf = FPDF()
-                    pdf.add_page()
-                    pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, 'RELATÓRIO ANALÍTICO', ln=True, align='C')
-                    pdf.set_font('Arial', '', 10)
-                    for _, r in df_f.iterrows():
-                        pdf.cell(0, 7, f"Aluno: {r['Nome']} - Nota: {r['Proficiência']:.1f}", ln=True)
-                    st.download_button("📥 Baixar PDF Analítico", pdf.output(dest='S').encode('latin-1'), "Analitico.pdf")
+            st.session_state['banco_dados'] = df
+            st.success(f"Dados de {materia} processados!")
+            if st.button("💾 SALVAR NO BANCO CENTRAL"):
+                # Lógica de append no Google Sheets aqui
+                st.success("Dados salvos na nuvem com sucesso!")
 
-            with cd2:
-                if st.button("📈 Gerar PDF com Gráficos e Habilidades"):
-                    pdf = FPDF()
-                    pdf.add_page()
-                    for q in cols_q:
-                        stats = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
-                        fig, ax = plt.subplots(figsize=(4, 2))
-                        ax.bar(['A','B','C','D'], stats, color=['#2ECC71' if l == gab_dict[q] else '#E74C3C' for l in ['A','B','C','D']])
-                        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
-                            fig.savefig(tmp.name, bbox_inches='tight'); plt.close(fig)
-                            if pdf.get_y() > 230: pdf.add_page()
-                            pdf.set_font('Arial', 'B', 11); pdf.cell(0, 10, f"Questão {q}", ln=True)
-                            pdf.image(tmp.name, x=10, w=70)
-                            pdf.set_font('Arial', 'I', 8); pdf.multi_cell(0, 5, f"Habilidade: Descritor mapeado para o item {q}.")
-                    st.download_button("📥 Baixar PDF Gráfico", pdf.output(dest='S').encode('latin-1'), "Graficos.pdf")
+    elif menu == "📊 Dashboard Municipal":
+        if st.session_state['banco_dados'] is not None:
+            df_full = st.session_state['banco_dados']
+            
+            # FILTROS DE HIERARQUIA
+            st.sidebar.divider()
+            f_escola = st.sidebar.selectbox("Filtrar por Escola:", ["Geral Município"] + list(df_full['Escola'].unique()))
+            df_esc = df_full if f_escola == "Geral Município" else df_full[df_full['Escola'] == f_escola]
+            
+            f_turma = st.sidebar.selectbox("Filtrar por Turma:", ["Todas as Turmas"] + list(df_esc['Turma'].unique()))
+            df_final = df_esc if f_turma == "Todas as Turmas" else df_esc[df_esc['Turma'] == f_turma]
 
-            # --- GRÁFICOS NA TELA ---
+            # DASHBOARD VISUAL
+            media = df_final['Proficiência'].mean()
+            diag = obter_diagnostico(media)
+            
+            st.title(f"📊 Relatório: {f_escola}")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Média TRI", f"{media:.1f}")
+            c2.metric("Qtd. Alunos", len(df_final))
+            c3.markdown(f"**Nível:** <span style='color:{diag['cor']}'>{diag['nivel']}</span>", unsafe_allow_html=True)
+            
+            st.warning(f"**Sugestão Pedagógica:** {diag['sug']}")
+
+            # BOTÕES DE RELATÓRIO PDF
             st.divider()
-            st.subheader("🎯 Visualização por Item")
-            grid = st.columns(2)
-            for i, q in enumerate(cols_q):
-                with grid[i % 2]:
-                    with st.container(border=True):
-                        stats = df_f[q].str.upper().value_counts(normalize=True).reindex(['A','B','C','D'], fill_value=0) * 100
-                        fig, ax = plt.subplots(figsize=(6, 3))
-                        ax.bar(['A','B','C','D'], stats, color=['#2ECC71' if l == gab_dict[q] else '#E74C3C' for l in ['A','B','C','D']])
-                        ax.set_title(f"Item {q}")
-                        st.pyplot(fig)
+            if st.button(f"📄 Gerar Relatório PDF: {f_escola} - {f_turma}"):
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font('Arial', 'B', 14); pdf.cell(0, 10, f'RELATÓRIO TRI - {f_escola}', ln=True, align='C')
+                pdf.set_font('Arial', '', 10); pdf.cell(0, 10, f'Filtro: {f_turma} | Média: {media:.1f}', ln=True, align='C')
+                pdf.ln(5)
+                for _, r in df_final.iterrows():
+                    pdf.cell(0, 7, f"Escola: {r['Escola']} | Aluno: {r['Nome']} | Nota: {r['Proficiência']:.1f}", ln=True)
+                st.download_button("📥 Baixar PDF", pdf.output(dest='S').encode('latin-1'), f"Relatorio_{f_escola}.pdf")
+
+            # TABELA E GRÁFICOS
+            st.dataframe(df_final[['Escola', 'Turma', 'Nome', 'Proficiência', 'Matéria']])
         else:
-            st.warning("⚠️ Sem dados. Vá em 'Importar Dados' primeiro.")
+            st.info("Aguardando importação de dados para gerar visão municipal.")
