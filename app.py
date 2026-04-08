@@ -6,19 +6,19 @@ import matplotlib.pyplot as plt
 # --- 1. CONFIGURAÇÕES INICIAIS ---
 st.set_page_config(page_title="Inteligência Educacional - José de Freitas", layout="wide", page_icon="📊")
 
-# --- 2. MOTORES DE CÁLCULO (TRI & NOTAS FICTÍCIAS) ---
+# --- 2. MOTORES DE CÁLCULO (TRI & HABILIDADES 9º ANO) ---
 def calcular_proficiencia_tri(respostas_binarias):
     """
-    Calcula a nota baseada nas habilidades de Matemática do 9º ano.
+    Calcula nota fictícia baseada nas habilidades de Matemática (EF09MA01, EF09MA03).
     1 = Acerto (C), 0 = Erro (E)
     """
     if not respostas_binarias: return 0
     acertos = sum(respostas_binarias.values())
     total = len(respostas_binarias)
     
-    # Simula a escala SAEB (0 a 400) com base no percentual de acerto
+    # Escala SAEB: 0 a 400
     percentual = acertos / total
-    nota = (percentual * 300) + 100 + np.random.uniform(-12, 12)
+    nota = (percentual * 300) + 100 + np.random.uniform(-10, 10)
     return round(nota, 1)
 
 def identificar_nivel_saeb(nota):
@@ -27,16 +27,17 @@ def identificar_nivel_saeb(nota):
     if nota < 325: return "Intermediário", "#FBC02D"
     return "Adequado", "#388E3C"
 
-# --- 3. CONTROLE DE SESSÃO E ACESSO ---
+# --- 3. CONTROLE DE SESSÃO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 if 'historico_geral' not in st.session_state:
     st.session_state['historico_geral'] = pd.DataFrame()
 
+# --- 4. TELA DE LOGIN ---
 if not st.session_state['autenticado']:
     st.markdown("<h1 style='text-align: center;'>🏛️ Sistema SIMAR - Monitoramento</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,1,1])
-    with col2:
+    col_l1, col_l2, col_l3 = st.columns([1,1,1])
+    with col_l2:
         u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
         if st.button("Acessar Painel", use_container_width=True):
@@ -44,7 +45,7 @@ if not st.session_state['autenticado']:
                 st.session_state['autenticado'] = True
                 st.rerun()
             else:
-                st.error("Usuário ou Senha incorretos")
+                st.error("Acesso negado")
 else:
     # --- MENU LATERAL ---
     st.sidebar.title("SISTEMA PEDAGÓGICO")
@@ -52,92 +53,81 @@ else:
 
     # --- PÁGINA 1: INICIAL E TUTORIAL ---
     if menu == "🏠 Página Inicial":
-        st.title("👋 Bem-vindo, Jardel Alves!")
-        st.markdown("### Monitoramento de Aprendizagem - Escola José Pacífico")
+        st.title("👋 Olá, Jardel Alves!")
+        st.markdown("### Monitoramento Escola José Pacífico")
         
-        c1, c2 = st.columns(2)
-        with c1:
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
             st.info("""
-            **📖 Tutorial de Operação:**
-            1. **Menu Importar:** Utilize para subir o arquivo Excel da Prova de Rede.
-            2. **Automação:** O código varre as primeiras 15 linhas para achar 'Matemática' ou 'Português'.
-            3. **Correção:** Ele compara a resposta do aluno com a linha do Gabarito.
-            4. **Conversão:** Transforma automaticamente o resultado em 1 (Acerto) ou 0 (Erro).
+            **📖 Tutorial:**
+            1. Vá em 'Importar Planilha'.
+            2. Suba o arquivo Excel da prova.
+            3. O sistema identifica se é Matemática ou Português sozinho.
+            4. O cálculo converte 'C' em 1 e erro em 0.
             """)
-        with c2:
+        with col_t2:
             st.success("""
-            **🎯 Habilidades do 9º Ano Aplicadas:**
-            - **EF09MA01/02:** Números Reais e Irracionais.
-            - **EF09MA03:** Cálculos com Potências e Radicais.
-            - **EF09MA08:** Proporcionalidade.
+            **🎯 Habilidades do 9º Ano:**
+            - EF09MA01: Reta numérica e irracionais.
+            - EF09MA03: Potências e Radicais.
+            - EF09MA08: Grandezas proporcionais.
             """)
 
-    # --- PÁGINA 2: IMPORTAÇÃO (ONDE O ERRO FOI CORRIGIDO) ---
+    # --- PÁGINA 2: IMPORTAÇÃO ---
     elif menu == "📝 Importar Planilha":
-        st.header("📝 Carregar Nova Planilha de Avaliação")
-        arq = st.file_uploader("Selecione o arquivo (.xlsx)", type="xlsx")
+        st.header("📝 Importar Novos Dados")
+        arq = st.file_uploader("Selecione o arquivo Excel", type="xlsx")
         
         if arq:
             try:
-                # Lendo a planilha e garantindo que tudo seja texto
                 df_raw = pd.read_excel(arq, header=None).fillna("")
+                # Varre o topo para identificar a matéria
+                cabecalho = " ".join(df_raw.iloc[:15].astype(str).values.flatten()).upper()
                 
-                # BUSCA DINÂMICA DE CABEÇALHO
-                texto_cabecalho = " ".join(df_raw.iloc[:15].astype(str).values.flatten()).upper()
-                
-                if "MATEMÁTICA" in texto_cabecalho:
-                    disciplina_detectada = "MATEMÁTICA"
-                elif "PORTUGUESA" in texto_cabecalho:
-                    disciplina_detectada = "LÍNGUA PORTUGUESA"
-                else:
-                    disciplina_detectada = "DISCIPLINA NÃO IDENTIF."
+                disciplina = "MATEMÁTICA" if "MATEMÁTICA" in cabecalho else "LÍNGUA PORTUGUESA"
+                turma = "A" if "TURMA A" in cabecalho or "TURMA: A" in cabecalho else "B"
 
-                turma_detectada = "A" if "TURMA: A" in texto_cabecalho or "TURMA A" in texto_cabecalho else "B"
-
-                # LOCALIZAR LINHA DO GABARITO
                 idx_gab = df_raw[df_raw[0].astype(str).str.upper().str.contains("GABARITO", na=False)].index
                 
                 if not idx_gab.empty:
                     linha_g = idx_gab[0]
-                    # Extrair o gabarito oficial (letras nas colunas pares a partir da C)
                     gabarito = [str(x).strip().upper() for x in df_raw.iloc[linha_g, 2:45].tolist() if str(x).strip() != ""]
                     
-                    qtd_questoes = len(gabarito)
-                    novos_dados = []
+                    num_q = len(gabarito)
+                    novos_registros = []
 
-                    # PROCESSAR CADA ALUNO
                     for i in range(linha_g + 1, len(df_raw)):
                         row = df_raw.iloc[i].tolist()
-                        nome = str(row[1]).strip().upper()
+                        nome_aluno = str(row[1]).strip().upper()
+                        if nome_aluno in ["NAN", "", "TOTAL", "OBSERVAÇÕES"]: break
                         
-                        # Para a leitura se chegar ao fim dos alunos
-                        if nome in ["NAN", "", "0", "TOTAL", "OBSERVAÇÕES"]: break
+                        # Lógica de acerto (1) e erro (0)
+                        acertos_bin = {}
+                        for j in range(num_q):
+                            resp = str(row[2 + (j*2)]).strip().upper()
+                            acertos_bin[f"Q{j+1}"] = 1 if resp == gabarito[j] else 0
                         
-                        # Lógica 1 (Acerto) e 0 (Erro)
-                        res_binarias = {}
-                        for q in range(qtd_questoes):
-                            resp_aluno = str(row[2 + (q*2)]).strip().upper()
-                            res_binarias[f"Q{q+1}"] = 1 if resp_aluno == gabarito[q] else 0
-                        
-                        nota_tri = calcular_proficiencia_tri(res_binarias)
+                        nota_tri = calcular_proficiencia_tri(acertos_bin)
                         nivel, cor = identificar_nivel_saeb(nota_tri)
                         
-                        novos_dados.append({
-                            "ALUNO": nome, 
-                            "NOTA": nota_tri, 
-                            "NÍVEL": nivel,
-                            "DISCIPLINA": disciplina_detectada,
-                            "TURMA": turma_detectada
+                        novos_registros.append({
+                            "ALUNO": nome_aluno, "NOTA": nota_tri, "NÍVEL": nivel,
+                            "DISCIPLINA": disciplina, "TURMA": turma
                         })
 
-                    df_importado = pd.DataFrame(novos_dados)
-                    st.session_state['historico_geral'] = pd.concat([st.session_state['historico_geral'], df_importado]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
-                    st.success(f"✅ Sucesso! {disciplina_detectada} - Turma {turma_detectada} carregada.")
-                else:
-                    st.error("Erro crítico: A palavra 'GABARITO' não foi encontrada na primeira coluna.")
+                    df_novo = pd.DataFrame(novos_registros)
+                    st.session_state['historico_geral'] = pd.concat([st.session_state['historico_geral'], df_novo]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
+                    st.success(f"✅ Sucesso: {disciplina} Turma {turma}!")
             except Exception as e:
-                st.error(f"Ocorreu um erro no processamento: {e}")
+                st.error(f"Erro no processamento: {e}")
 
-    # --- PÁGINA 3: PAINEL ANALÍTICO E GRÁFICOS ---
+    # --- PÁGINA 3: PAINEL ANALÍTICO (CORRIGIDO) ---
     elif menu == "📊 Painel Analítico":
         if not st.session_state['historico_geral'].empty:
+            df_full = st.session_state['historico_geral']
+            lista_disc = df_full['DISCIPLINA'].unique()
+            escolha = st.sidebar.selectbox("Escolha a Matéria", lista_disc)
+            
+            df = df_full[df_full['DISCIPLINA'] == escolha]
+            
+            st.title(
