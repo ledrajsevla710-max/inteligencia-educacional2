@@ -106,4 +106,4 @@ else:
             st.markdown("- **< 200 (Muito Crítico):** Dificuldade em info. explícitas.\n- **200-249 (Crítico):** Identifica tema, mas não infere.\n- **250-299 (Intermediário):** Domina leitura básica.\n- **> 300 (Adequado):** Capacidade plena.")
         with col2:
             st.subheader("📐 Matemática")
-            st.markdown("- **< 225 (Muito Crítico):** Dificuldade em operações básicas.\n- **225-274 (Crítico):** Resolve problemas simples.\n- **275-324 (Intermediário):** Resolve porcent
+            st.markdown("- **< 225 (Muito Crítico):** Dificuldade em operações básicas.\n- **225-274 (Crítico):** Resolve problemas simples.\n- **275-324 (Intermediário):** Resolve porcent"
