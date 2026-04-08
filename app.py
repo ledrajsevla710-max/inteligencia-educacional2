@@ -59,18 +59,18 @@ else:
         col_t1, col_t2 = st.columns(2)
         with col_t1:
             st.info("""
-            **📖 Tutorial:**
-            1. Vá em 'Importar Planilha'.
-            2. Suba o arquivo Excel da prova.
-            3. O sistema identifica se é Matemática ou Português sozinho.
-            4. O cálculo converte 'C' em 1 e erro em 0.
+            **📖 Tutorial de Uso:**
+            1. Vá no menu lateral e clique em **'Importar Planilha'**.
+            2. Carregue o arquivo Excel da Prova de Rede.
+            3. O sistema detecta automaticamente se é **Matemática** ou **Português**.
+            4. O cálculo de proficiência converte cada acerto em **1** e cada erro em **0**.
             """)
         with col_t2:
             st.success("""
-            **🎯 Habilidades do 9º Ano:**
-            - EF09MA01: Reta numérica e irracionais.
-            - EF09MA03: Potências e Radicais.
-            - EF09MA08: Grandezas proporcionais.
+            **🎯 Habilidades do 9º Ano Integradas:**
+            - **EF09MA01/02:** Números Reais e Irracionais.
+            - **EF09MA03:** Potências e Radicais.
+            - **EF09MA08:** Grandezas Proporcionais.
             """)
 
     # --- PÁGINA 2: IMPORTAÇÃO ---
@@ -104,6 +104,7 @@ else:
                         # Lógica de acerto (1) e erro (0)
                         acertos_bin = {}
                         for j in range(num_q):
+                            # Colunas de respostas costumam saltar de 2 em 2 (Resposta | Correção)
                             resp = str(row[2 + (j*2)]).strip().upper()
                             acertos_bin[f"Q{j+1}"] = 1 if resp == gabarito[j] else 0
                         
@@ -117,11 +118,13 @@ else:
 
                     df_novo = pd.DataFrame(novos_registros)
                     st.session_state['historico_geral'] = pd.concat([st.session_state['historico_geral'], df_novo]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
-                    st.success(f"✅ Sucesso: {disciplina} Turma {turma}!")
+                    st.success(f"✅ Sucesso: {disciplina} Turma {turma} processada!")
+                else:
+                    st.error("Palavra 'GABARITO' não encontrada na planilha.")
             except Exception as e:
                 st.error(f"Erro no processamento: {e}")
 
-    # --- PÁGINA 3: PAINEL ANALÍTICO (CORRIGIDO) ---
+    # --- PÁGINA 3: PAINEL ANALÍTICO ---
     elif menu == "📊 Painel Analítico":
         if not st.session_state['historico_geral'].empty:
             df_full = st.session_state['historico_geral']
@@ -130,4 +133,31 @@ else:
             
             df = df_full[df_full['DISCIPLINA'] == escolha]
             
-            st.title(
+            # TÍTULO CORRIGIDO (O erro estava aqui)
+            st.title(f"📊 Relatório de {escolha}")
+            
+            # Métricas
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Média Proficiência", round(df['NOTA'].mean(), 1))
+            c2.metric("Total Alunos", len(df))
+            c3.metric("Maior Nota", df['NOTA'].max())
+
+            # Gráfico de Barras
+            st.subheader("Distribuição por Nível de Aprendizagem")
+            fig, ax = plt.subplots(figsize=(10, 4))
+            ordem = ["Muito Crítico", "Crítico", "Intermediário", "Adequado"]
+            cores = ["#D32F2F", "#F57C00", "#FBC02D", "#388E3C"]
+            contagem = df['NÍVEL'].value_counts().reindex(ordem, fill_value=0)
+            contagem.plot(kind='bar', color=cores, ax=ax)
+            plt.xticks(rotation=0)
+            st.pyplot(fig)
+            
+            st.subheader("Lista Nominal de Notas")
+            st.table(df[['ALUNO', 'NOTA', 'NÍVEL']])
+        else:
+            st.warning("Importe os dados primeiro no menu 'Importar Planilha'.")
+
+    # --- SAIR ---
+    elif menu == "🚪 Sair":
+        st.session_state['autenticado'] = False
+        st.rerun()
