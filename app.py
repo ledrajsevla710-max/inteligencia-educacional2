@@ -8,12 +8,14 @@ import io, tempfile, os
 # --- 1. CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Inteligência Educacional - José de Freitas", layout="wide", page_icon="📊")
 
-# --- 2. MOTORES DE CÁLCULO ---
+# --- 2. MOTORES DE CÁLCULO (TRI) ---
 def calcular_tri(respostas):
     num_q = len(respostas)
+    if num_q == 0: return 0
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
     for i, (q, acerto) in enumerate(respostas.items()):
+        # b = dificuldade da questão distribuída na escala
         b = np.linspace(-2.5, 2.5, num_q)[i]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
@@ -26,121 +28,69 @@ def obter_nivel_escala(valor, disciplina):
     if valor < ponto + 100: return "Intermediário", "#FBC02D"
     return "Adequado", "#388E3C"
 
-# --- 3. INTERFACE ---
+# --- 3. AMBIENTE LOGADO E NAVEGAÇÃO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.title("🏛️ Sistema de Inteligência - José de Freitas")
-    u = st.text_input("Usuário"); s = st.text_input("Senha", type="password")
-    if st.button("Entrar"):
-        if u == "12345" and s == "000": # Ajuste conforme sua necessidade
-            st.session_state['autenticado'] = True; st.rerun()
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Sistema de Inteligência Educacional</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Acesse com suas credenciais de servidor municipal.</p>", unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1,1,1])
+    with col2:
+        u = st.text_input("Usuário (CPF/Matrícula)")
+        s = st.text_input("Senha", type="password")
+        if st.button("Entrar no Sistema", use_container_width=True):
+            if u == "12345" and s == "000": # Ajuste conforme sua segurança
+                st.session_state['autenticado'] = True; st.rerun()
+            else: st.error("Credenciais inválidas.")
+
 else:
-    menu = st.sidebar.radio("Navegação", ["📝 Importar Planilha", "📊 Painel Analítico", "🏢 Relatórios", "🚪 Sair"])
+    menu = st.sidebar.radio("Menu Principal", ["🏠 Início & Tutorial", "📝 Importar Planilha", "📊 Painel Analítico", "🏢 Gerar Relatórios", "🚪 Sair"])
 
     if menu == "🚪 Sair":
         st.session_state['autenticado'] = False; st.rerun()
 
+    elif menu == "🏠 Início & Tutorial":
+        st.title("👋 Bem-vindo ao Inteligência Educacional")
+        st.markdown(f"### Olá, servidor! Este portal foi desenvolvido para transformar os dados das Provas de Rede de José de Freitas em estratégias pedagógicas.")
+        
+        col_t1, col_t2 = st.columns(2)
+        with col_t1:
+            st.info("""
+            **📌 Como funciona o App?**
+            O sistema utiliza a **Teoria de Resposta ao Item (TRI)**, a mesma metodologia do SAEB. 
+            Ele não apenas conta acertos, mas analisa a consistência pedagógica do aluno, identificando quem realmente domina a habilidade e quem acertou por acaso.
+            """)
+        with col_t2:
+            st.success("""
+            **📖 Tutorial de Uso:**
+            1. Vá em **'Importar Planilha'** no menu lateral.
+            2. Carregue o arquivo original da Prova de Rede (.xlsx).
+            3. O sistema lerá o **Gabarito** e a **Escola** automaticamente da planilha.
+            4. Veja os resultados no **'Painel Analítico'** e baixe os PDFs em **'Relatórios'**.
+            """)
+        
+        st.warning("⚠️ **Dica Importante:** Certifique-se de que a palavra 'GABARITO' esteja presente na planilha para que o sistema saiba quais são as respostas corretas!")
+
     elif menu == "📝 Importar Planilha":
-        st.header("📝 Upload da Planilha de Rede")
-        arq = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type="xlsx")
+        st.header("📝 Carregar Nova Avaliação")
+        arq = st.file_uploader("Selecione o arquivo Excel da Prova de Rede", type="xlsx")
         
         if arq:
-            # Lemos a planilha bruta
             df_raw = pd.read_excel(arq, header=None)
             
-            # 1. Captura Escola e Turma (posições baseadas no seu arquivo)
+            # 1. Identificação Automática de Escola e Disciplina
             try:
-                escola = str(df_raw.iloc[4, 9]).strip() # Célula J5
-                turma = str(df_raw.iloc[7, 10]).strip()  # Célula K8
-                disciplina = str(df_raw.iloc[6, 30]).strip() # Célula AE7
+                escola = str(df_raw.iloc[4, 9]).strip() # J5
+                disciplina = str(df_raw.iloc[6, 30]).strip() # AE7
+                turma = str(df_raw.iloc[7, 10]).strip() # K8
             except:
-                escola, turma, disciplina = "Escola", "A", "Geral"
+                escola, disciplina, turma = "Escola Municipal", "Geral", "A"
 
-            # 2. Localizar a linha do GABARITO (Procurando em qualquer coluna)
-            # Na sua planilha, "GABARITO" está na Coluna A (índice 0)
-            mascara = df_raw.apply(lambda row: row.astype(str).str.contains('GABARITO').any(), axis=1)
-            idx_gabarito = df_raw[mascara].index
+            # 2. Localização Dinâmica do Gabarito e Habilidades
+            idx_gab = df_raw[df_raw.apply(lambda r: r.astype(str).str.contains('GABARITO').any(), axis=1)].index
+            idx_hab = df_raw[df_raw.apply(lambda r: r.astype(str).str.contains('HABILIDADE').any(), axis=1)].index
             
-            if not idx_gabarito.empty:
-                linha_gab = idx_gabarito[0]
-                # O Gabarito oficial está na linha identificada, começando da coluna D (índice 3)
-                # Saltando de 2 em 2 colunas (onde estão as letras)
-                linha_dados_gab = df_raw.iloc[linha_gab].tolist()
-                gabarito_oficial = [str(x).strip().upper() for x in linha_dados_gab[2:45] if str(x).strip() in ['A', 'B', 'C', 'D', 'E']]
-                
-                num_questoes = len(gabarito_oficial)
-                
-                # 3. Processar Alunos (começam logo abaixo do gabarito)
-                lista_alunos = []
-                for idx in range(linha_gab + 1, len(df_raw)):
-                    row = df_raw.iloc[idx].tolist()
-                    nome_aluno = str(row[1]).strip() # Nome está na Coluna B
-                    
-                    # Para se parar quando encontrar o "TOTAL DE ACERTOS"
-                    if nome_aluno == "nan" or "TOTAL" in nome_aluno.upper() or "OBSERVAÇÕES" in nome_aluno.upper():
-                        continue
-                    
-                    # Extrair respostas (também saltando colunas)
-                    res_binaria = {}
-                    respostas_aluno = [str(x).strip().upper() for x in row[2:45]]
-                    # Filtramos apenas as letras nas colunas corretas
-                    letras_aluno = []
-                    for val in respostas_aluno:
-                        if val in ['A', 'B', 'C', 'D', 'E', 'N/A']:
-                            letras_aluno.append(val)
-                    
-                    for i in range(num_questoes):
-                        gab = gabarito_oficial[i]
-                        resp = letras_aluno[i] if i < len(letras_aluno) else ""
-                        res_binaria[f"Q{i+1:02d}"] = 1 if resp == gab else 0
-                    
-                    prof = calcular_tri(res_binaria)
-                    nivel, _ = obter_nivel_escala(prof, disciplina)
-                    
-                    lista_alunos.append({
-                        "NOME": nome_aluno,
-                        "PROF_TRI": prof,
-                        "DESEMPENHO": nivel,
-                        "ESCOLA": escola,
-                        "TURMA": turma,
-                        "DISCIPLINA": disciplina
-                    })
-                
-                df_final = pd.DataFrame(lista_alunos)
-                st.session_state['consolidado'] = df_final
-                st.success(f"✅ Processado: {escola} | {disciplina} | {len(df_final)} alunos")
-                st.dataframe(df_final[['NOME', 'PROF_TRI', 'DESEMPENHO']].head())
-            else:
-                st.error("Palavra 'GABARITO' não encontrada. Verifique se a planilha segue o modelo da rede.")
-
-    elif menu == "📊 Painel Analítico":
-        if 'consolidado' in st.session_state:
-            df = st.session_state['consolidado']
-            st.subheader(f"📊 Diagnóstico: {df['ESCOLA'].iloc[0]} - {df['DISCIPLINA'].iloc[0]}")
-            st.dataframe(df[['NOME', 'PROF_TRI', 'DESEMPENHO']], use_container_width=True)
-        else:
-            st.warning("Importe os dados primeiro.")
-
-    elif menu == "🏢 Relatórios":
-        if 'consolidado' in st.session_state:
-            df = st.session_state['consolidado']
-            if st.button("📥 Gerar PDF"):
-                pdf = FPDF(orientation='L', unit='mm', format='A4')
-                pdf.add_page()
-                def t(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
-                
-                pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, t(f"RELATÓRIO DE DESEMPENHO - {df['ESCOLA'].iloc[0]}"), ln=True, align='C')
-                pdf.ln(10)
-                pdf.set_font('Arial', 'B', 10)
-                pdf.cell(100, 8, "NOME DO ALUNO", 1); pdf.cell(40, 8, "NOTA TRI", 1); pdf.cell(60, 8, "NÍVEL", 1)
-                pdf.ln()
-                pdf.set_font('Arial', '', 9)
-                for _, r in df.iterrows():
-                    pdf.cell(100, 7, t(r['NOME'][:45]), 1)
-                    pdf.cell(40, 7, f"{r['PROF_TRI']:.1f}", 1)
-                    pdf.cell(60, 7, t(r['DESEMPENHO']), 1)
-                    pdf.ln()
-                st.download_button("Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio.pdf")
+            if not idx_gab.empty:
+                linha_g = idx_gab[0]
+                #
