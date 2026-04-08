@@ -78,13 +78,18 @@ else:
             - Organiza os alunos e gera o gráfico por matéria.
             """)
 
-    elif menu == "📝 Importar Planilha":
+    # O "if" que manda no bloco (exemplo)
+    if menu == "🏠 Início":
+        st.title("Bem-vindo")
+        # ... seu código aqui
+
+    elif menu == "📝 Importar Planilha":  # ESTE ELIF DEVE ESTAR ALINHADO COM O IF ACIMA
         st.header("📝 Importar Dados de Rede")
-        elif menu == "📝 Importar Planilha":
-        st.header("📝 Importar Dados de Rede")
-        # CORREÇÃO AQUI:
         arq = st.file_uploader("Suba o arquivo .xlsx (Matemática ou Português)", type="xlsx")
         
+        if arq:
+            df_raw = pd.read_excel(arq, header=None)
+            # ... resto do seu código indentado para dentro do "if arq"
         if arq:
             df_raw = pd.read_excel(arq, header=None)
             # ... resto do código
