@@ -80,4 +80,11 @@ else:
 
     elif menu == "📝 Importar Planilha":
         st.header("📝 Importar Dados de Rede")
-        arq = st.file_uploader("Suba o arquivo .xlsx (Matemática ou
+        elif menu == "📝 Importar Planilha":
+        st.header("📝 Importar Dados de Rede")
+        # CORREÇÃO AQUI:
+        arq = st.file_uploader("Suba o arquivo .xlsx (Matemática ou Português)", type="xlsx")
+        
+        if arq:
+            df_raw = pd.read_excel(arq, header=None)
+            # ... resto do código
