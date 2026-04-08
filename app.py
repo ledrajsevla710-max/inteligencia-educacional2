@@ -12,17 +12,16 @@ st.set_page_config(page_title="Inteligência Educacional - José de Freitas", la
 if 'usuarios_db' not in st.session_state:
     st.session_state['usuarios_db'] = {"12345": "000"} 
 
-# --- 3. MATRIZES 1º BIMESTRE (DESCRIÇÕES) ---
-MATRIZ_LP = {f"Q{i:02d}": f"Descritor D{i} - Língua Portuguesa" for i in range(1, 23)}
-MATRIZ_MAT = {f"Q{i:02d}": f"Descritor D{i} - Matemática" for i in range(1, 23)}
-
-GABARITO = ['A','B','C','D', 'A','B','C','D', 'C','A','A','B', 'C','D','C','C', 'C','A','C','A', 'A','B']
+# --- 3. MATRIZES 1º BIMESTRE ---
+MATRIZ_LP = {f"Q{i:02d}": f"Habilidade {i} - Língua Portuguesa" for i in range(1, 23)}
+MATRIZ_MAT = {f"Q{i:02d}": f"Habilidade {i} - Matemática" for i in range(1, 23)}
 
 # --- 4. MOTORES DE CÁLCULO ---
 def calcular_tri(respostas):
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
     for i, (q, acerto) in enumerate(respostas.items()):
+        # Dificuldade estimada (b) baseada na posição da questão
         b = np.linspace(-2.5, 2.5, 22)[i]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
@@ -35,105 +34,137 @@ def obter_nivel_escala(valor, disciplina):
     if valor < ponto + 100: return "Intermediário", "#FBC02D"
     return "Adequado", "#388E3C"
 
-# --- 5. LOGIN ---
+# --- 5. TELA DE ACESSO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center;'>🏛️ Inteligência Educacional</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Sistema de Inteligência Educacional</h1>", unsafe_allow_html=True)
     u = st.text_input("Usuário"); s = st.text_input("Senha", type="password")
-    if st.button("Aceder"):
+    if st.button("Entrar"):
         if u in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u] == s:
             st.session_state['autenticado'] = True; st.rerun()
+        else: st.error("Acesso negado.")
+
+# --- 6. AMBIENTE LOGADO ---
 else:
-    menu = st.sidebar.radio("Navegação", ["📝 Importar Planilha", "📊 Painel Analítico", "🏢 Relatório Escola/Município", "🚪 Sair"])
+    menu = st.sidebar.radio("Navegação", ["🏠 Início", "📝 Importar Dados", "📊 Painel Analítico", "🏢 Relatório Escola", "🏙️ Relatório Municipal", "🚪 Sair"])
 
     if menu == "🚪 Sair":
         st.session_state['autenticado'] = False; st.rerun()
 
-    elif menu == "📝 Importar Planilha":
-        st.header("📝 Carregar Planilha da Rede")
+    elif menu == "📝 Importar Dados":
+        st.header("📝 Importar Planilha de Rede")
+        ano_letivo = st.selectbox("Ano Escolar", ["2º Ano", "5º Ano", "9º Ano"])
         disc = st.selectbox("Disciplina", ["Língua Portuguesa", "Matemática"])
-        arq = st.file_uploader("Selecione o arquivo Excel", type="xlsx")
+        
+        arq = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type="xlsx")
         
         if arq:
-            # Lemos o arquivo bruto para extrair metadados das células do topo
+            # Lemos a planilha bruta sem cabeçalho para localizar a estrutura
             df_raw = pd.read_excel(arq, header=None)
             
-            # Tentar localizar Escola e Turma em células específicas (baseado no seu modelo)
-            nome_escola = str(df_raw.iloc[4, 9]).strip() if len(df_raw) > 4 else "Não Identificada"
-            nome_turma = str(df_raw.iloc[7, 10]).strip() if len(df_raw) > 7 else "A"
-            
-            # Lemos novamente focando na tabela de alunos (geralmente começa após a linha 12)
-            df = pd.read_excel(arq, skiprows=12)
-            df.columns = [str(c).strip().upper() for c in df.columns]
-            
-            # Renomear coluna de nomes se necessário (procurando por "NOME" ou "ALUNO")
-            col_nome = [c for c in df.columns if "NOME" in c or "DÉBORHA" in str(df[c].iloc[0]).upper()]
-            if col_nome: df.rename(columns={col_nome[0]: "NOME_ALUNO"}, inplace=True)
+            # 1. Extrair Escola e Turma de células fixas (J5 e K8 aprox.)
+            try:
+                escola_nome = str(df_raw.iloc[4, 9]).strip() # Coluna J, Linha 5
+                turma_nome = str(df_raw.iloc[7, 10]).strip() # Coluna K, Linha 8
+            except:
+                escola_nome = "ESCOLA NÃO IDENTIFICADA"
+                turma_nome = "A"
 
-            if "NOME_ALUNO" in df.columns:
-                # Limpeza: remove linhas de "TOTAL" ou vazias
-                df = df[df['NOME_ALUNO'].notna() & (df['NOME_ALUNO'] != "0")]
+            # 2. Localizar a linha onde está o "GABARITO" para começar a ler os alunos
+            # Procuramos na coluna B (índice 1) onde costumam estar os nomes
+            idx_gabarito = df_raw[df_raw[1].astype(str).str.contains("GABARITO", na=False)].index
+            
+            if not idx_gabarito.empty:
+                linha_inicio = idx_gabarito[0]
+                # O gabarito oficial está nesta linha
+                gabarito_oficial = df_raw.iloc[linha_inicio, 3:45:2].tolist() # Pega as letras nas colunas cinzas
                 
-                for idx, row in df.iterrows():
-                    # Mapeia as questões Q01, Q02...
-                    res_bin = {}
-                    for i in range(1, 23):
-                        col_q = f"Q{i:02d}"
-                        # Se a coluna não existir exatamente, tentamos achar por aproximação
-                        val_res = str(row.get(col_q, row.iloc[i*2] if i*2 < len(row) else '')).upper()
-                        res_bin[col_q] = 1 if val_res == GABARITO[i-1] else 0
+                # Os alunos começam logo abaixo do Gabarito
+                df_alunos = df_raw.iloc[linha_inicio + 1:].copy()
+                
+                lista_processada = []
+                
+                for idx, row in df_alunos.iterrows():
+                    nome_aluno = str(row[1]).strip()
+                    # Ignora linhas de Total ou Observações
+                    if nome_aluno == "nan" or "TOTAL" in nome_aluno.upper() or "OBSERVAÇÕES" in nome_aluno.upper():
+                        continue
                     
-                    prof = calcular_tri(res_bin)
-                    df.at[idx, 'PROF_TRI'] = prof
-                    nivel, _ = obter_nivel_escala(prof, disc)
-                    df.at[idx, 'DESEMPENHO'] = nivel
-
-                df['ESCOLA'] = nome_escola
-                df['TURMA'] = nome_turma
-                df['DISCIPLINA'] = disc
+                    # Extrair respostas (colunas D, F, H... intercaladas)
+                    respostas_aluno = row[3:45:2].tolist()
+                    res_binaria = {}
+                    
+                    for i in range(len(gabarito_oficial)):
+                        q_key = f"Q{i+1:02d}"
+                        gab = str(gabarito_oficial[i]).strip().upper()
+                        resp = str(respostas_aluno[i]).strip().upper()
+                        res_binaria[q_key] = 1 if resp == gab and resp != "NAN" else 0
+                    
+                    # Cálculo da Proficiência
+                    prof = calcular_tri(res_binaria)
+                    nivel, cor = obter_nivel_escala(prof, disc)
+                    
+                    lista_processada.append({
+                        "NOME": nome_aluno,
+                        "ESCOLA": escola_nome,
+                        "TURMA": turma_nome,
+                        "PROF_TRI": prof,
+                        "DESEMPENHO": nivel,
+                        "COR": cor,
+                        **res_binaria
+                    })
                 
-                st.session_state['consolidado'] = df
-                st.success(f"✅ Planilha da Escola {nome_escola} processada!")
-                st.dataframe(df[['NOME_ALUNO', 'PROF_TRI', 'DESEMPENHO']].head())
+                df_final = pd.DataFrame(lista_processada)
+                df_final['DISCIPLINA'] = disc
+                
+                st.session_state['consolidado'] = df_final
+                st.success(f"✅ Sucesso! Escola: {escola_nome} | Alunos: {len(df_final)}")
+                st.dataframe(df_final[['NOME', 'PROF_TRI', 'DESEMPENHO']].head())
             else:
-                st.error("Não foi possível localizar a coluna de nomes dos alunos.")
+                st.error("Não encontramos a palavra 'GABARITO' na coluna dos nomes. Verifique o formato da planilha.")
 
     elif menu == "📊 Painel Analítico":
         if 'consolidado' in st.session_state:
             df = st.session_state['consolidado']
-            st.subheader(f"Análise: {df['ESCOLA'].iloc[0]} - Turma {df['TURMA'].iloc[0]}")
-            st.write("### Lista de Proficiência Individual")
-            st.dataframe(df[['NOME_ALUNO', 'PROF_TRI', 'DESEMPENHO']], use_container_width=True)
-        else:
-            st.warning("Importe a planilha primeiro.")
-
-    elif menu == "🏢 Relatório Escola/Município":
-        if 'consolidado' in st.session_state:
-            df_final = st.session_state['consolidado']
-            matriz = MATRIZ_MAT if df_final['DISCIPLINA'].iloc[0] == "Matemática" else MATRIZ_LP
+            st.subheader(f"📊 Análise: {df['ESCOLA'].iloc[0]} - Turma {df['TURMA'].iloc[0]}")
             
-            if st.button("📥 Gerar PDF Completo"):
+            media_turma = df['PROF_TRI'].mean()
+            nivel_t, cor_t = obter_nivel_escala(media_turma, df['DISCIPLINA'].iloc[0])
+            
+            st.metric("Média de Proficiência da Turma", f"{media_turma:.1f}", nivel_t)
+            
+            st.write("### 👥 Desempenho Individual")
+            st.dataframe(df[['NOME', 'PROF_TRI', 'DESEMPENHO']], use_container_width=True)
+        else:
+            st.warning("Importe dados primeiro.")
+
+    elif menu in ["🏢 Relatório Escola", "🏙️ Relatório Municipal"]:
+        if 'consolidado' in st.session_state:
+            df_geral = st.session_state['consolidado']
+            if st.button("📥 Gerar Relatório em PDF"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
                 def t(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
                 
                 pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, t(f"DIAGNÓSTICO: {df_final['ESCOLA'].iloc[0]}"), ln=True, align='C')
+                pdf.cell(0, 10, t(f"DIAGNÓSTICO EDUCACIONAL - {df_geral['ESCOLA'].iloc[0]}"), ln=True, align='C')
                 pdf.set_font('Arial', '', 12)
-                pdf.cell(0, 10, t(f"Turma: {df_final['TURMA'].iloc[0]} | Disciplina: {df_final['DISCIPLINA'].iloc[0]}"), ln=True, align='C')
+                pdf.cell(0, 8, t(f"Disciplina: {df_geral['DISCIPLINA'].iloc[0]} | Turma: {df_geral['TURMA'].iloc[0]}"), ln=True, align='C')
                 
                 pdf.ln(10)
                 pdf.set_font('Arial', 'B', 10)
-                pdf.cell(90, 8, "ALUNO", 1); pdf.cell(40, 8, "NOTA TRI", 1); pdf.cell(60, 8, "NÍVEL", 1)
+                pdf.cell(100, 8, "NOME DO ALUNO", 1); pdf.cell(40, 8, "PROFICIÊNCIA", 1); pdf.cell(60, 8, "NÍVEL", 1)
                 pdf.ln()
                 
                 pdf.set_font('Arial', '', 9)
-                for _, r in df_final.iterrows():
-                    pdf.cell(90, 7, t(r['NOME_ALUNO'][:40]), 1)
+                for _, r in df_geral.iterrows():
+                    pdf.cell(100, 7, t(r['NOME'][:45]), 1)
                     pdf.cell(40, 7, f"{r['PROF_TRI']:.1f}", 1)
                     pdf.cell(60, 7, t(r['DESEMPENHO']), 1)
                     pdf.ln()
                 
-                st.download_button("Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio_Rede.pdf")
+                st.download_button("Clique para baixar", pdf.output(dest='S').encode('latin-1'), "Relatorio_Final.pdf")
+        else:
+            st.warning("Sem dados consolidados.")
