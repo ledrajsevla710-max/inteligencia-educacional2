@@ -8,11 +8,10 @@ import io, tempfile, os
 # --- 1. CONFIGURAÇÕES DA PÁGINA ---
 st.set_page_config(page_title="Inteligência Educacional - José de Freitas", layout="wide", page_icon="📊")
 
-# --- 2. GESTÃO DE USUÁRIOS (SESSÃO) ---
+# --- 2. GESTÃO DE USUÁRIOS E BANCO DE DADOS (SESSÃO) ---
 if 'usuarios_db' not in st.session_state:
     st.session_state['usuarios_db'] = {"12345": "000"} 
 
-# Banco de dados simulado para salvar os registros das escolas
 if 'banco_geral' not in st.session_state:
     st.session_state['banco_geral'] = []
 
@@ -59,104 +58,137 @@ def calcular_tri(respostas):
 
 def obter_nivel_escala(valor, disciplina):
     if disciplina == "Língua Portuguesa":
-        if valor < 200: return "Muito Crítico", "#D32F2F", "Dificuldade em localizar informações básicas."
-        if valor < 250: return "Crítico", "#F57C00", "Identifica o tema, mas falha em inferências."
-        if valor < 300: return "Intermediário", "#FBC02D", "Domina leitura básica e ironia simples."
-        return "Adequado", "#388E3C", "Capacidade plena de interpretação e tese."
+        if valor < 200: return "Muito Crítico", "#D32F2F"
+        if valor < 250: return "Crítico", "#F57C00"
+        if valor < 300: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
     else:
-        if valor < 225: return "Muito Crítico", "#D32F2F", "Dificuldade em operações e formas simples."
-        if valor < 275: return "Crítico", "#F57C00", "Resolve adição/subtração, falha em geometria."
-        if valor < 325: return "Intermediário", "#FBC02D", "Resolve porcentagem e gráficos básicos."
-        return "Adequado", "#388E3C", "Domina álgebra e funções complexas."
+        if valor < 225: return "Muito Crítico", "#D32F2F"
+        if valor < 275: return "Crítico", "#F57C00"
+        if valor < 325: return "Intermediário", "#FBC02D"
+        return "Adequado", "#388E3C"
 
-# --- 5. TELA DE ACESSO ---
+# --- 5. LOGIN ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Sistema de Inteligência Educacional</h1>", unsafe_allow_html=True)
-    aba_l, aba_c = st.tabs(["🔐 Login do Gestor", "📝 Cadastro de Novo Usuário"])
-    with aba_l:
-        u = st.text_input("CPF ou Matrícula"); s = st.text_input("Senha", type="password")
-        if st.button("Entrar no Painel"):
-            if u in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u] == s:
-                st.session_state['autenticado'] = True; st.rerun()
-            else: st.error("Acesso negado.")
-    with aba_c:
-        nu = st.text_input("Definir Usuário"); ns = st.text_input("Definir Senha", type="password")
-        if st.button("Finalizar Cadastro"):
-            if nu and ns:
-                st.session_state['usuarios_db'][nu] = ns; st.success("Cadastro realizado!")
-
-# --- 6. AMBIENTE LOGADO ---
+    st.markdown("<h1 style='text-align: center;'>🏛️ Sistema de Inteligência Educacional</h1>", unsafe_allow_html=True)
+    u = st.text_input("Usuário"); s = st.text_input("Senha", type="password")
+    if st.button("Entrar"):
+        if u in st.session_state['usuarios_db'] and st.session_state['usuarios_db'][u] == s:
+            st.session_state['autenticado'] = True; st.rerun()
 else:
-    menu = st.sidebar.radio("Navegação", ["🏠 Início (Técnico)", "📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
+    # --- 6. MENU ---
+    menu = st.sidebar.radio("Navegação", ["📝 Importar Dados", "📊 Painel Analítico", "🚪 Sair"])
 
     if menu == "🚪 Sair":
         st.session_state['autenticado'] = False; st.rerun()
 
-    elif menu == "🏠 Início (Técnico)":
-        st.title("🔬 Embasamento Técnico e Metodologia")
-        st.markdown("### 1. Teoria de Resposta ao Item (TRI)")
-        st.latex(r"P_i(\theta) = c_i + \frac{1 - c_i}{1 + e^{-1.7 \cdot a_i \cdot (\theta - b_i)}}")
-        st.info("**Nota:** Este modelo logístico de 3 parâmetros avalia a habilidade real considerando dificuldade, discriminação e acerto casual (chute).")
-        st.markdown("### 2. Escalas de Proficiência (Referência SAEB/SAEPI)")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("📚 Língua Portuguesa")
-            st.markdown("- **< 200 (Muito Crítico)**\n- **200-249 (Crítico)**\n- **250-299 (Intermediário)**\n- **> 300 (Adequado)**")
-        with col2:
-            st.subheader("📐 Matemática")
-            st.markdown("- **< 225 (Muito Crítico)**\n- **225-274 (Crítico)**\n- **275-324 (Intermediário)**\n- **> 325 (Adequado)**")
-
     elif menu == "📝 Importar Dados":
-        st.header("📝 Upload de Avaliações - 1º Bimestre")
+        st.header("📝 Importar Nova Planilha")
         c1, c2, c3, c4 = st.columns(4)
-        escola = c1.text_input("Nome da Escola")
-        ano = c2.selectbox("Ano Escolar", ["2º Ano", "5º Ano", "9º Ano"])
-        turma = c3.text_input("Turma (Ex: 9º A)")
+        esc = c1.text_input("Escola")
+        ano = c2.selectbox("Ano", ["2º Ano", "5º Ano", "6º Ano", "7º Ano", "8º Ano", "9º Ano"])
+        turma = c3.text_input("Turma")
         disc = c4.selectbox("Disciplina", ["Língua Portuguesa", "Matemática"])
         
-        arq = st.file_uploader("Selecione o arquivo Excel (.xlsx)", type="xlsx")
-        
+        arq = st.file_uploader("Excel", type="xlsx")
         if arq:
-            # Lógica de identificação e bloqueio
-            nome_arquivo = arq.name.upper()
-            ano_numero = "".join(filter(str.isdigit, ano)) # Extrai '9' de '9º Ano'
-            
             df = pd.read_excel(arq).fillna("N/A")
-            # Verifica se o ano selecionado está no arquivo ou no conteúdo
-            identificou_ano = (ano_numero in nome_arquivo) or (df.astype(str).apply(lambda x: x.str.contains(ano_numero)).any().any())
-
-            if not identificou_ano:
-                st.error(f"❌ Erro de Identificação: O arquivo enviado não parece ser do {ano}. Verifique os dados.")
+            num_ano = "".join(filter(str.isdigit, ano))
+            if num_ano not in arq.name and not df.astype(str).apply(lambda x: x.str.contains(num_ano)).any().any():
+                st.error("Planilha incompatível com o ano selecionado.")
             else:
-                if st.button("Processar e Salvar no Banco"):
+                if st.button("Salvar Dados"):
                     for idx, row in df.iterrows():
                         res_bin = {f'Q{i:02d}': (1 if str(row[f'Q{i:02d}']).upper() == GABARITO[i-1] else 0) for i in range(1, 23)}
                         df.at[idx, 'Prof_TRI'] = calcular_tri(res_bin)
                     
-                    st.session_state['db'] = df
-                    st.session_state['meta'] = {"escola": escola, "ano": ano, "turma": turma, "disc": disc}
+                    # Salva metadados no DataFrame para filtros posteriores
+                    df['Escola'] = esc
+                    df['Ano'] = ano
+                    df['Turma'] = turma
+                    df['Disciplina'] = disc
                     
-                    # Salva no Banco de Dados (Session State)
-                    registro = {"escola": escola, "ano": ano, "turma": turma, "disc": disc, "media": df['Prof_TRI'].mean()}
-                    st.session_state['banco_geral'].append(registro)
-                    
-                    st.success(f"✅ Sucesso! Escola {escola} - {turma} salva no banco de dados.")
+                    st.session_state['banco_geral'].append(df)
+                    st.success("Dados salvos!")
 
     elif menu == "📊 Painel Analítico":
-        if 'db' in st.session_state:
-            df, meta = st.session_state['db'], st.session_state['meta']
-            matriz = MATRIZ_MAT if meta['disc'] == "Matemática" else MATRIZ_LP
-            media = df['Prof_TRI'].mean()
-            nivel, cor, desc_ped = obter_nivel_escala(media, meta['disc'])
-            
-            st.subheader(f"Análise Final: {meta['escola']} | {meta['ano']} | {meta['turma']}")
-            st.markdown(f"<div style='background:{cor}; color:white; padding:20px; border-radius:10px; text-align:center;'><h3>Média: {media:.1f} | Nível: {nivel}</h3><p>{desc_ped}</p></div>", unsafe_allow_html=True)
-            
-            # --- O restante dos gráficos e PDF seguem aqui conforme seu código original ---
-            st.write("Exibindo dados de desempenho por questão...")
-            # (Código dos gráficos omitido para brevidade, mas permanece igual ao seu original)
+        if not st.session_state['banco_geral']:
+            st.warning("Nenhum dado no banco.")
         else:
-            st.warning("Importe os dados primeiro.")
+            # Consolida todo o banco em um único DataFrame
+            df_total = pd.concat(st.session_state['banco_geral'], ignore_index=True)
+            
+            st.title("📊 Filtros de Resultado")
+            # Opções de Filtro
+            tipo_view = st.radio("Selecione o Nível de Visualização:", ["Geral (Rede)", "Por Escola", "Por Turma"], horizontal=True)
+            
+            df_filtrado = df_total.copy()
+            titulo_analise = "Resultado Geral da Rede"
+
+            if tipo_view == "Por Escola":
+                lista_escolas = df_total['Escola'].unique()
+                escolha_esc = st.selectbox("Selecione a Escola", lista_escolas)
+                df_filtrado = df_total[df_total['Escola'] == escolha_esc]
+                titulo_analise = f"Resultado: {escolha_esc}"
+            
+            elif tipo_view == "Por Turma":
+                lista_escolas = df_total['Escola'].unique()
+                escolha_esc = st.selectbox("Selecione a Escola", lista_escolas)
+                turmas_da_escola = df_total[df_total['Escola'] == escolha_esc]['Turma'].unique()
+                escolha_turma = st.selectbox("Selecione a Turma", turmas_da_escola)
+                df_filtrado = df_total[(df_total['Escola'] == escolha_esc) & (df_total['Turma'] == escolha_turma)]
+                titulo_analise = f"Resultado: {escolha_esc} - Turma {escolha_turma}"
+
+            # --- EXIBIÇÃO DOS RESULTADOS ---
+            st.divider()
+            st.header(titulo_analise)
+            
+            # Média e Nível
+            media_final = df_filtrado['Prof_TRI'].mean()
+            disc_ref = df_filtrado['Disciplina'].iloc[0]
+            nivel, cor = obter_nivel_escala(media_final, disc_ref)
+            
+            st.markdown(f"<div style='background:{cor}; color:white; padding:20px; border-radius:10px; text-align:center;'><h2>Média TRI: {media_final:.1f} | Nível: {nivel}</h2></div>", unsafe_allow_html=True)
+
+            # --- GRÁFICOS (RESTURADOS) ---
+            st.subheader("🎯 Desempenho por Item")
+            matriz_ref = MATRIZ_MAT if disc_ref == "Matemática" else MATRIZ_LP
+            cols = st.columns(3)
+            
+            for i in range(1, 23):
+                q = f'Q{i:02d}'; gab = GABARITO[i-1]
+                counts = df_filtrado[q].astype(str).str.upper().value_counts(normalize=True) * 100
+                
+                with cols[(i-1) % 3]:
+                    with st.container(border=True):
+                        st.write(f"**Questão {i}** (Gabarito: {gab})")
+                        fig, ax = plt.subplots(figsize=(4, 3))
+                        opc = ['A','B','C','D']
+                        cores = ['#2ECC71' if o == gab else '#E74C3C' for o in opc]
+                        ax.bar(opc, [counts.get(o, 0) for o in opc], color=cores)
+                        ax.set_ylim(0, 100)
+                        st.pyplot(fig)
+                        plt.close()
+                        st.caption(f"Habilidade: {matriz_ref[q]}")
+
+            # --- PDF ---
+            if st.button("Gerar PDF do Resultado Atual"):
+                pdf = FPDF(orientation='L', unit='mm', format='A4'); pdf.add_page()
+                pdf.set_font('Arial', 'B', 16)
+                pdf.cell(0, 10, f"RELATORIO - {titulo_analise}", ln=True, align='C')
+                pdf.cell(0, 10, f"MEDIA: {media_final:.1f} - NIVEL: {nivel}", ln=True, align='C')
+                
+                # Gráfico Geral para o PDF
+                fig_pdf, ax_pdf = plt.subplots(figsize=(10, 4))
+                acertos_lista = [df_filtrado[f'Q{i:02d}'].astype(str).str.upper().value_counts(normalize=True).get(GABARITO[i-1], 0)*100 for i in range(1, 23)]
+                ax_pdf.bar([f"Q{i}" for i in range(1, 23)], acertos_lista, color='#1E3A8A')
+                
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                    plt.savefig(tmp.name); plt.close()
+                    pdf.image(tmp.name, x=10, y=40, w=270)
+                os.unlink(tmp.name)
+                
+                st.download_button("Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio.pdf")
