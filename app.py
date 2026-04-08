@@ -3,162 +3,130 @@ import pandas as pd
 import numpy as np
 from fpdf import FPDF
 import matplotlib.pyplot as plt
-import io
 
 # --- 1. CONFIGURAÇÕES ---
-st.set_page_config(page_title="Inteligência Educacional - José de Freitas", layout="wide", page_icon="📊")
+st.set_page_config(page_title="Inteligência Educacional", layout="wide")
 
-def aplicar_design():
-    st.markdown("""
-        <style>
-        .main { background-color: #f8f9fa; }
-        .stMetric { background-color: #ffffff; border-left: 5px solid #1E3A8A; padding: 15px; border-radius: 10px; }
-        h1, h2, h3 { color: #1E3A8A; }
-        </style>
-    """, unsafe_allow_html=True)
-
-# --- 2. MOTORES TÉCNICOS ---
+# --- 2. MOTOR DE CÁLCULO (TRI) ---
 def calcular_tri(respostas_binarias):
     if not respostas_binarias: return 0
     num_q = len(respostas_binarias)
     thetas = np.linspace(-4, 4, 100)
     verossimilhanca = np.ones_like(thetas)
     for i, (q, acerto) in enumerate(respostas_binarias.items()):
-        b = np.linspace(-2.5, 2.5, num_q)[i]
+        # Se for 1 (Acerto), usa probabilidade de acerto. Se for 0 (Erro), o inverso.
+        b = np.linspace(-2, 2, num_q)[i]
         p = 0.2 + (0.8) / (1 + np.exp(-1.7 * (thetas - b)))
         verossimilhanca *= p if acerto == 1 else (1 - p)
     return (thetas[np.argmax(verossimilhanca)] + 4) * 50
 
 def obter_nivel(valor, disciplina):
-    d_upper = disciplina.upper()
-    corte = 200 if "PORTUGUESA" in d_upper or "LÍNGUA" in d_upper else 225
+    corte = 200 if "PORTUGUESA" in disciplina.upper() else 225
     if valor < corte: return "Muito Crítico", "#D32F2F"
     if valor < corte + 50: return "Crítico", "#F57C00"
     if valor < corte + 100: return "Intermediário", "#FBC02D"
     return "Adequado", "#388E3C"
 
-# --- 3. ACESSO E MEMÓRIA ---
+# --- 3. ACESSO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
-if 'historico_geral' not in st.session_state:
-    st.session_state['historico_geral'] = pd.DataFrame()
+if 'historico' not in st.session_state:
+    st.session_state['historico'] = pd.DataFrame()
 
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center;'>🏛️ Portal de Inteligência Educacional</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1,1,1])
-    with col2:
-        u = st.text_input("Usuário")
-        s = st.text_input("Senha", type="password")
-        if st.button("Acessar Painel", use_container_width=True):
-            if u == "12345" and s == "000":
-                st.session_state['autenticado'] = True
-                st.rerun()
-            else:
-                st.error("Acesso Negado")
+    st.title("🏛️ Portal de Inteligência Educacional")
+    u = st.text_input("Usuário")
+    s = st.text_input("Senha", type="password")
+    if st.button("Entrar"):
+        if u == "12345" and s == "000":
+            st.session_state['autenticado'] = True
+            st.rerun()
 else:
-    aplicar_design()
-    menu = st.sidebar.radio("Navegação", ["🏠 Início", "📝 Importar Planilha", "📊 Painel Analítico", "🏢 Relatórios PDF", "🚪 Sair"])
+    menu = st.sidebar.radio("Navegação", ["🏠 Início", "📝 Importar", "📊 Painel", "🏢 Relatórios", "🚪 Sair"])
 
     if menu == "🏠 Início":
-        st.title("👋 Olá, Jardel!")
-        st.info("Dica: Importe as planilhas de Matemática e Português para habilitar os filtros no gráfico.")
+        st.title(f"👋 Olá, Jardel!")
+        st.write("Sistema pronto para processar as planilhas da Escola José Pacífico.")
 
-    elif menu == "📝 Importar Planilha":
-        st.header("📝 Carregar Planilha (.xlsx)")
-        arq = st.file_uploader("Selecione o arquivo", type="xlsx")
+    elif menu == "📝 Importar":
+        st.header("📝 Carregar Planilha")
+        arq = st.file_uploader("Selecione o arquivo Excel", type="xlsx")
         
         if arq:
-            df_raw = pd.read_excel(arq, header=None)
-            try:
-                escola = str(df_raw.iloc[4, 9]).strip().upper() 
-                disc = str(df_raw.iloc[6, 30]).strip().upper()
-                turma = str(df_raw.iloc[7, 10]).strip().upper()
-            except:
-                escola, disc, turma = "ESCOLA MUNICIPAL", "GERAL", "A"
+            df_raw = pd.read_excel(arq, header=None).astype(str)
+            
+            # Tenta capturar disciplina e turma buscando no texto
+            conteudo_total = " ".join(df_raw.iloc[:10].values.flatten()).upper()
+            
+            disc = "MATEMÁTICA" if "MATEMÁTICA" in conteudo_total else "LÍNGUA PORTUGUESA"
+            turma = "A" if "TURMA: A" in conteudo_total else "B"
+            escola = "JOSÉ PACÍFICO"
 
-            idx_gab = df_raw[df_raw[0].astype(str).str.upper().str.contains("GABARITO", na=False)].index
+            # Localiza o Gabarito
+            idx_gab = df_raw[df_raw[0].str.upper().str.contains("GABARITO", na=False)].index
             
             if not idx_gab.empty:
                 linha_g = idx_gab[0]
-                letras_v = ['A', 'B', 'C', 'D']
-                gabarito = [str(x).strip().upper() for x in df_raw.iloc[linha_g, 2:45].tolist() 
-                            if str(x).strip().upper() in letras_v]
-                
+                # Pega as letras do gabarito (Colunas C em diante)
+                gabarito = [x.strip().upper() for x in df_raw.iloc[linha_g, 2:45].tolist() if x.strip().upper() in ['A','B','C','D']]
                 num_q = len(gabarito)
+                
                 processados = []
-
+                # Percorre alunos abaixo do gabarito
                 for i in range(linha_g + 1, len(df_raw)):
                     row = df_raw.iloc[i].tolist()
-                    nome = str(row[1]).strip().upper()
-                    if nome in ["NAN", "0", "1.0", ""] or "TOTAL" in nome or "OBSERV" in nome:
-                        break
+                    nome = row[1].strip().upper()
+                    if nome in ["NAN", "", "TOTAL", "OBSERVAÇÕES"]: break
                     
-                    res_aluno = [str(x).strip().upper() for x in row[2:45] 
-                                 if str(x).strip().upper() in letras_v or str(x).strip() == ""]
+                    # Lógica de correção: 1 se bater com gabarito, 0 se não.
+                    res_binaria = {}
+                    for j in range(num_q):
+                        resp_aluno = row[2 + (j*2)].strip().upper() if (2 + (j*2)) < len(row) else ""
+                        res_binaria[f"Q{j+1}"] = 1 if resp_aluno == gabarito[j] else 0
                     
-                    res_bin = {f"Q{j+1:02d}": (1 if (j < len(res_aluno) and res_aluno[j] == gabarito[j]) else 0) 
-                               for j in range(num_q)}
-                    
-                    prof = calcular_tri(res_bin)
+                    prof = calcular_tri(res_binaria)
                     nivel, cor = obter_nivel(prof, disc)
                     
-                    # AQUI ESTAVA O ERRO - QUEBREI EM VÁRIAS LINHAS PARA NÃO CORTAR:
-                    dados_aluno = {
-                        "ALUNO": nome, 
-                        "NOTA": prof, 
-                        "NÍVEL": nivel, 
-                        "DISCIPLINA": disc, 
-                        "ESCOLA": escola, 
-                        "TURMA": turma
-                    }
-                    processados.append(dados_aluno)
+                    processados.append({
+                        "ALUNO": nome, "NOTA": round(prof, 1), 
+                        "NÍVEL": nivel, "COR": cor, "DISCIPLINA": disc, "TURMA": turma
+                    })
 
                 df_novo = pd.DataFrame(processados)
-                st.session_state['historico_geral'] = pd.concat([st.session_state['historico_geral'], df_novo]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
-                st.success(f"✅ Planilha de {disc} processada!")
+                st.session_state['historico'] = pd.concat([st.session_state['historico'], df_novo]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
+                st.success(f"✅ {disc} - Turma {turma} importada!")
 
-    elif menu == "📊 Painel Analítico":
-        if not st.session_state['historico_geral'].empty:
-            df_full = st.session_state['historico_geral']
-            lista_disc = df_full['DISCIPLINA'].unique()
-            filtro = st.sidebar.selectbox("🎯 Escolha a Matéria", lista_disc)
-            df = df_full[df_full['DISCIPLINA'] == filtro]
+    elif menu == "📊 Painel":
+        if not st.session_state['historico'].empty:
+            df_h = st.session_state['historico']
+            escolha = st.sidebar.selectbox("Filtrar Matéria", df_h['DISCIPLINA'].unique())
+            df = df_h[df_h['DISCIPLINA'] == escolha]
             
-            st.title(f"📊 Análise: {filtro}")
-            c1, c2 = st.columns(2)
-            c1.metric("Média Proficiência", f"{df['NOTA'].mean():.1f}")
-            c2.metric("Nº de Alunos", len(df))
+            st.title(f"📊 Desempenho: {escolha}")
+            col1, col2 = st.columns(2)
+            col1.metric("Média da Turma", round(df['NOTA'].mean(), 1))
+            col2.metric("Total Alunos", len(df))
 
+            # --- GRÁFICO DE BARRAS ---
+            st.subheader("Distribuição por Níveis")
             fig, ax = plt.subplots(figsize=(10, 4))
             ordem = ["Muito Crítico", "Crítico", "Intermediário", "Adequado"]
+            cores = ["#D32F2F", "#F57C00", "#FBC02D", "#388E3C"]
             contagem = df['NÍVEL'].value_counts().reindex(ordem, fill_value=0)
-            contagem.plot(kind='bar', color=["#D32F2F", "#F57C00", "#FBC02D", "#388E3C"], ax=ax)
+            contagem.plot(kind='bar', color=cores, ax=ax)
+            plt.xticks(rotation=0)
             st.pyplot(fig)
+
             st.table(df[['ALUNO', 'NOTA', 'NÍVEL']])
         else:
-            st.warning("Importe as planilhas primeiro.")
+            st.warning("Importe dados primeiro.")
 
-    elif menu == "🏢 Relatórios PDF":
-        if not st.session_state['historico_geral'].empty:
-            df_rel = st.session_state['historico_geral']
-            escolha = st.selectbox("Disciplina para o PDF:", df_rel['DISCIPLINA'].unique())
-            df_final = df_rel[df_rel['DISCIPLINA'] == escolha]
-            if st.button("Baixar PDF"):
-                pdf = FPDF(orientation='L', unit='mm', format='A4')
-                pdf.add_page()
-                def t(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
-                pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, t(f"DIAGNÓSTICO: {df_final['ESCOLA'].iloc[0]} - {escolha}"), ln=True, align='C')
-                pdf.ln(10)
-                pdf.set_font('Arial', 'B', 10)
-                pdf.cell(110, 8, "ALUNO", 1); pdf.cell(30, 8, "NOTA", 1); pdf.cell(60, 8, "NÍVEL", 1)
-                pdf.ln()
-                pdf.set_font('Arial', '', 9)
-                for _, r in df_final.iterrows():
-                    pdf.cell(110, 7, t(r['ALUNO']), 1); pdf.cell(30, 7, f"{r['NOTA']:.1f}", 1); pdf.cell(60, 7, t(r['NÍVEL']), 1)
-                    pdf.ln()
-                st.download_button("Salvar Arquivo", pdf.output(dest='S').encode('latin-1'), f"Resultado_{escolha}.pdf")
-
+    elif menu == "🏢 Relatórios":
+        if not st.session_state['historico'].empty:
+            # Botão de download simples do que está na tela
+            csv = st.session_state['historico'].to_csv(index=False).encode('utf-8')
+            st.download_button("Baixar Planilha Consolidada (CSV)", csv, "resultado.csv")
+            
     elif menu == "🚪 Sair":
         st.session_state['autenticado'] = False
         st.rerun()
