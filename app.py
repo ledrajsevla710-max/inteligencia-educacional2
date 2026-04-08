@@ -5,10 +5,19 @@ from fpdf import FPDF
 import matplotlib.pyplot as plt
 import io
 
-# --- 1. CONFIGURAÇÕES DE PÁGINA ---
+# --- 1. CONFIGURAÇÕES E ESTÉTICA ---
 st.set_page_config(page_title="Inteligência Educacional - José de Freitas", layout="wide", page_icon="📊")
 
-# --- 2. MOTORES TÉCNICOS ---
+def aplicar_design():
+    st.markdown("""
+        <style>
+        .main { background-color: #f8f9fa; }
+        .stMetric { background-color: #ffffff; border-left: 5px solid #1E3A8A; padding: 10px; border-radius: 5px; }
+        h1, h2 { color: #1E3A8A; }
+        </style>
+    """, unsafe_allow_html=True)
+
+# --- 2. MOTORES TÉCNICOS (TRI) ---
 def calcular_tri(respostas_binarias):
     if not respostas_binarias: return 0
     num_q = len(respostas_binarias)
@@ -21,152 +30,156 @@ def calcular_tri(respostas_binarias):
     return (thetas[np.argmax(verossimilhanca)] + 4) * 50
 
 def obter_nivel(valor, disciplina):
+    # O .upper() garante que a regra funcione mesmo se digitar 'matemática' ou 'MATEMÁTICA'
     corte = 200 if "PORTUGUESA" in disciplina.upper() else 225
     if valor < corte: return "Muito Crítico", "#D32F2F"
     if valor < corte + 50: return "Crítico", "#F57C00"
     if valor < corte + 100: return "Intermediário", "#FBC02D"
     return "Adequado", "#388E3C"
 
-# --- 3. INTERFACE DE ACESSO ---
+# --- 3. GESTÃO DE ACESSO ---
 if 'autenticado' not in st.session_state:
     st.session_state['autenticado'] = False
 
 if not st.session_state['autenticado']:
-    st.markdown("<h1 style='text-align: center; color: #1E3A8A;'>🏛️ Portal de Inteligência Educacional</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🏛️ Portal de Inteligência Educacional</h1>", unsafe_allow_html=True)
     col1, col2, col3 = st.columns([1,1,1])
     with col2:
-        u = st.text_input("Usuário (CPF/Matrícula)")
+        u = st.text_input("Usuário")
         s = st.text_input("Senha", type="password")
-        if st.button("Acessar Sistema", use_container_width=True):
+        if st.button("Acessar Painel", use_container_width=True):
             if u == "12345" and s == "000":
                 st.session_state['autenticado'] = True; st.rerun()
-            else: st.error("Acesso negado.")
+            else: st.error("Acesso Negado")
 else:
-    menu = st.sidebar.radio("Navegação", ["🏠 Home", "📝 Importar Planilha", "📊 Painel Analítico", "🏢 Relatórios PDF", "🚪 Sair"])
+    aplicar_design()
+    menu = st.sidebar.radio("Navegação Principal", ["🏠 Início", "📝 Importar Planilha", "📊 Painel Analítico", "🏢 Relatórios PDF", "🚪 Sair"])
 
-    if menu == "🏠 Home":
-        st.title("👋 Bem-vindo ao Sistema de Diagnóstico")
-        st.markdown("### Gestão Pedagógica Baseada em Dados")
+    if menu == "🏠 Início":
+        st.title("👋 Bem-vindo ao Sistema, Jardel!")
+        st.markdown("### Monitoramento Pedagógico - José de Freitas/PI")
         
         c1, c2 = st.columns(2)
         with c1:
             st.info("""
-            **💡 Como o App Funciona?**
-            1. **Padronização:** O sistema converte automaticamente todas as respostas para **MAIÚSCULAS**, evitando erros de digitação.
-            2. **Leitura de Gabarito:** Ele localiza a linha 'GABARITO' na sua planilha e usa esses dados para corrigir a prova.
-            3. **Filtro Inteligente:** Identifica onde terminam os alunos e ignora as 'Observações' e 'Totais' do final do arquivo.
+            **📋 Funcionalidades Ativas:**
+            - **Filtro de Disciplina:** Agora você escolhe qual matéria quer ver.
+            - **Padronização:** Todo o texto é convertido para **MAIÚSCULAS** (.upper).
+            - **TRI Inteligente:** Nota calculada pela dificuldade das questões.
             """)
         with c2:
             st.success("""
-            **🚀 Tutorial Rápido:**
-            - Vá em **Importar Planilha** e envie o arquivo .xlsx.
-            - O sistema fará o cálculo da nota **TRI** (Metodologia SAEB).
-            - No **Painel Analítico**, visualize o gráfico de desempenho da sua turma.
+            **🛠️ Tutorial Rápido:**
+            1. Carregue o arquivo em **'Importar Planilha'**.
+            2. O sistema reconhece Escola e Matéria automaticamente.
+            3. No **Painel Analítico**, use o botão lateral para trocar entre Português e Matemática.
             """)
-        st.divider()
-        st.markdown("#### Status do Sistema: 🟢 Operacional")
 
     elif menu == "📝 Importar Planilha":
-        st.header("📝 Upload de Dados da Rede")
-        arq = st.file_uploader("Selecione a planilha Excel", type="xlsx")
+        st.header("📝 Carregamento de Dados")
+        arq = st.file_uploader("Suba a planilha original (.xlsx)", type="xlsx")
         
         if arq:
             df_raw = pd.read_excel(arq, header=None)
             
-            # Identificação de Metadados (Escola, Disciplina, Turma)
             try:
+                # Extração com .upper() para segurança total
                 escola = str(df_raw.iloc[4, 9]).strip().upper() 
                 disc = str(df_raw.iloc[6, 30]).strip().upper()
                 turma = str(df_raw.iloc[7, 10]).strip().upper()
             except:
                 escola, disc, turma = "ESCOLA MUNICIPAL", "GERAL", "A"
 
-            # Localiza a linha do GABARITO (Scan na coluna A)
-            idx_gab = df_raw[df_raw[0].astype(str).str.contains("GABARITO", na=False, case=False)].index
+            # Localiza Gabarito na Coluna A
+            idx_gab = df_raw[df_raw[0].astype(str).str.upper().str.contains("GABARITO", na=False)].index
             
             if not idx_gab.empty:
                 linha_g = idx_gab[0]
-                # Captura gabarito em linha (D, F, H...) e garante MAIÚSCULAS
-                gabarito_oficial = [str(x).strip().upper() for x in df_raw.iloc[linha_g, 2:45].tolist() if str(x).strip().upper() in ['A', 'B', 'C', 'D']]
+                gabarito = [str(x).strip().upper() for x in df_raw.iloc[linha_g, 2:45].tolist() if str(x).strip().upper() in ['A', 'B', 'C', 'D']]
                 
-                num_q = len(gabarito_oficial)
-                processados = []
+                num_q = len(gabarito)
+                lista_final = []
 
                 # Processa Alunos
                 for i in range(linha_g + 1, len(df_raw)):
                     row = df_raw.iloc[i].tolist()
                     nome = str(row[1]).strip().upper()
                     
-                    # Filtro para parar nas Observações ou Totais
                     if nome in ["NAN", "0", "1.0", ""] or "TOTAL" in nome or "OBSERV" in nome:
                         break
                     
-                    # Respostas do aluno (Normalizadas para Maiúsculas)
-                    res_aluno_bruto = [str(x).strip().upper() for x in row[2:45] if str(x).strip().upper() in ['A', 'B', 'C', 'D', 'N/A', '']]
+                    res_aluno = [str(x).strip().upper() for x in row[2:45] if str(x).strip().upper() in ['A', 'B', 'C', 'D', 'N/A', '']]
                     
-                    res_bin = {}
-                    for q_idx in range(num_q):
-                        gab = gabarito_oficial[q_idx]
-                        resp = res_aluno_bruto[q_idx] if q_idx < len(res_aluno_bruto) else ""
-                        res_bin[f"Q{q_idx+1:02d}"] = 1 if resp == gab else 0
+                    res_bin = {f"Q{j+1:02d}": (1 if (j < len(res_aluno) and res_aluno[j] == gabarito[j]) else 0) for j in range(num_q)}
                     
                     prof = calcular_tri(res_bin)
                     nivel, cor = obter_nivel(prof, disc)
                     
-                    processados.append({
-                        "ALUNO": nome, "PROF_TRI": prof, "NÍVEL": nivel, "COR": cor,
+                    lista_final.append({
+                        "ALUNO": nome, "NOTA": prof, "NÍVEL": nivel,
                         "ESCOLA": escola, "TURMA": turma, "DISCIPLINA": disc
                     })
 
-                st.session_state['consolidado'] = pd.DataFrame(processados)
-                st.success(f"✅ Sucesso! {len(processados)} alunos processados de {escola}.")
-                st.dataframe(st.session_state['consolidado'][['ALUNO', 'PROF_TRI', 'NÍVEL']])
+                # Armazena no Histórico
+                novo_df = pd.DataFrame(lista_final)
+                if 'historico' not in st.session_state:
+                    st.session_state['historico'] = novo_df
+                else:
+                    st.session_state['historico'] = pd.concat([st.session_state['historico'], novo_df]).drop_duplicates(subset=['ALUNO', 'DISCIPLINA'])
+                
+                st.success(f"✅ Dados de {disc} carregados com sucesso!")
             else:
-                st.error("Erro: A palavra 'GABARITO' não foi encontrada na planilha.")
+                st.error("⚠️ Linha 'GABARITO' não encontrada.")
 
     elif menu == "📊 Painel Analítico":
-        if 'consolidado' in st.session_state:
-            df = st.session_state['consolidado']
-            st.title(f"📊 Painel de Desempenho - {df['ESCOLA'].iloc[0]}")
+        if 'historico' in st.session_state:
+            df_hist = st.session_state['historico']
             
-            col_m1, col_m2, col_m3 = st.columns(3)
-            col_m1.metric("Média da Turma", f"{df['PROF_TRI'].mean():.1f}")
-            col_m2.metric("Total de Alunos", len(df))
-            col_m3.metric("Disciplina", df['DISCIPLINA'].iloc[0])
+            # --- O BOTÃO DA DISCIPLINA (SELECTBOX) ---
+            st.sidebar.markdown("---")
+            disc_selecionada = st.sidebar.selectbox("🎯 Filtrar Disciplina", df_hist['DISCIPLINA'].unique())
+            
+            df = df_hist[df_hist['DISCIPLINA'] == disc_selecionada]
+            
+            st.title(f"📊 Análise: {disc_selecionada}")
+            st.write(f"**Escola:** {df['ESCOLA'].iloc[0]} | **Turma:** {df['TURMA'].iloc[0]}")
+            
+            c1, c2 = st.columns(2)
+            c1.metric("Média da Turma", f"{df['NOTA'].mean():.1f}")
+            c2.metric("Qtd. Alunos", len(df))
 
-            # --- GRÁFICO ---
-            st.subheader("Distribuição por Níveis de Aprendizagem")
-            fig, ax = plt.subplots(figsize=(10, 5))
-            cores_map = {"Muito Crítico": "#D32F2F", "Crítico": "#F57C00", "Intermediário": "#FBC02D", "Adequado": "#388E3C"}
-            
+            # Gráfico de Desempenho
+            fig, ax = plt.subplots(figsize=(8, 4))
             contagem = df['NÍVEL'].value_counts().reindex(["Muito Crítico", "Crítico", "Intermediário", "Adequado"], fill_value=0)
-            contagem.plot(kind='bar', color=[cores_map[n] for n in contagem.index], ax=ax)
-            plt.ylabel("Quantidade de Alunos")
+            contagem.plot(kind='bar', color=["#D32F2F", "#F57C00", "#FBC02D", "#388E3C"], ax=ax)
             plt.xticks(rotation=0)
             st.pyplot(fig)
             
-            st.table(df[['ALUNO', 'PROF_TRI', 'NÍVEL']])
+            st.table(df[['ALUNO', 'NOTA', 'NÍVEL']])
         else:
-            st.warning("Importe dados primeiro.")
+            st.warning("Importe os dados primeiro.")
 
     elif menu == "🏢 Relatórios PDF":
-        if 'consolidado' in st.session_state:
-            df = st.session_state['consolidado']
-            if st.button("Gerar PDF para Impressão"):
+        if 'historico' in st.session_state:
+            df_full = st.session_state['historico']
+            disc_pdf = st.selectbox("Escolha a disciplina para o PDF:", df_full['DISCIPLINA'].unique())
+            df = df_full[df_full['DISCIPLINA'] == disc_pdf]
+            
+            if st.button("Gerar Relatório"):
                 pdf = FPDF(orientation='L', unit='mm', format='A4')
                 pdf.add_page()
                 def t(txt): return str(txt).encode('latin-1', 'replace').decode('latin-1')
                 pdf.set_font('Arial', 'B', 16)
-                pdf.cell(0, 10, t(f"DIAGNÓSTICO EDUCACIONAL - {df['ESCOLA'].iloc[0]}"), ln=True, align='C')
+                pdf.cell(0, 10, t(f"RELATÓRIO: {df['ESCOLA'].iloc[0]} - {disc_pdf}"), ln=True, align='C')
                 pdf.ln(10)
                 pdf.set_font('Arial', 'B', 10)
-                pdf.cell(100, 8, "NOME DO ALUNO", 1); pdf.cell(40, 8, "NOTA TRI", 1); pdf.cell(60, 8, "NÍVEL", 1)
+                pdf.cell(110, 8, "ALUNO", 1); pdf.cell(30, 8, "NOTA", 1); pdf.cell(60, 8, "NÍVEL", 1)
                 pdf.ln()
                 pdf.set_font('Arial', '', 9)
                 for _, r in df.iterrows():
-                    pdf.cell(100, 7, t(r['ALUNO']), 1); pdf.cell(40, 7, f"{r['PROF_TRI']:.1f}", 1); pdf.cell(60, 7, t(r['NÍVEL']), 1)
+                    pdf.cell(110, 7, t(r['ALUNO']), 1); pdf.cell(30, 7, f"{r['NOTA']:.1f}", 1); pdf.cell(60, 7, t(r['NÍVEL']), 1)
                     pdf.ln()
-                st.download_button("Baixar Relatório", pdf.output(dest='S').encode('latin-1'), "Relatorio_Final.pdf")
+                st.download_button("Baixar PDF", pdf.output(dest='S').encode('latin-1'), "Relatorio.pdf")
 
     elif menu == "🚪 Sair":
         st.session_state['autenticado'] = False; st.rerun()
